@@ -528,25 +528,39 @@ def plan_visit_route(
 # 4) 静态地图（真实位置 + 真实顺序），key 仅在服务端拼接与代理
 # --------------------------------------------------------------------------- #
 def build_static_map_url(points: list[dict[str, Any]]) -> str:
-    """points: 有序 [{lat, lng, label}]。返回腾讯静态地图 URL（含 key，仅供服务端代理）。"""
+    """points: 有序 [{lat, lng, label, name?, isStart?, isEnd?}]。返回腾讯静态地图 URL（含 key，仅供服务端代理）。
+
+    注意：腾讯静态地图 marker 的 label 仅支持单个字母/数字（A-Z, 0-9），
+    不支持中文，因此这里统一用序号数字做标注，靠颜色区分起点/终点/中间站。
+    """
     if not points:
         return ""
     center = points[0]
+    # size 上限 1024*1024，scale 上限 2；此处取安全值避免被腾讯拒绝返回空图
     parts: list[str] = [
         f"center={center['lat']},{center['lng']}",
         "zoom=12",
-        "scale=1",
-        "size=900*600",
+        "scale=2",
+        "size=640*480",
     ]
     # 路径：穿过所有真实坐标点
     path_pts = ";".join(f"{p['lat']},{p['lng']}" for p in points)
     parts.append("paths=" + urllib.parse.quote(f"color:0x0067aa,weight:6|{path_pts}"))
-    # 编号标记
-    for p in points:
-        label = str(p.get("label", ""))[:1]
+    # 起点(绿) / 终点(红) / 中间站(蓝)，标注均用序号数字（与前端对照表一致）
+    n = len(points)
+    for i, p in enumerate(points):
+        is_start = bool(p.get("isStart")) or i == 0
+        is_end = bool(p.get("isEnd")) or i == n - 1
+        if is_start and n > 1:
+            color = "0x10b981"  # 绿色：出发地 / 首站
+        elif is_end and i > 0:
+            color = "0xef4444"  # 红色：最后一站
+        else:
+            color = "0x3b82f6"  # 蓝色：中间站点
+        marker_label = str(p.get("label", i + 1))[:1]  # 仅取首字符，保证单字符且为数字/字母
         parts.append(
             "markers="
-            + urllib.parse.quote(f"size:large|color:0xff5a00|label:{label}|{p['lat']},{p['lng']}")
+            + urllib.parse.quote(f"size:large|color:{color}|label:{marker_label}|{p['lat']},{p['lng']}")
         )
     return f"{STATICMAP_ENDPOINT}?{'&'.join(parts)}&key={TENCENT_KEY}"
 
@@ -658,7 +672,13 @@ class MapHandler(SimpleHTTPRequestHandler):
                 if plan.get("ok") and plan.get("stops"):
                     try:
                         map_points = [
-                            {"lat": s["lat"], "lng": s["lng"], "label": str(s["sequence"])}
+                            {
+                                "lat": s["lat"],
+                                "lng": s["lng"],
+                                "label": str(s["sequence"]),
+                                "name": s.get("name", ""),
+                                "isStart": bool(s.get("isStart")),
+                            }
                             for s in plan["stops"]
                             if s.get("lat") is not None and s.get("lng") is not None
                         ]
@@ -789,7 +809,7 @@ $("#go").onclick=async ()=>{
   try{
     const plan=await call("/api/visit-route",{items,start,mode:"driving"});
     if(!plan.ok){ $("#result").innerHTML='<div class="err">'+plan.message+'</div>'; return; }
-    const pts=plan.stops.map((s,i)=>({lat:s.lat,lng:s.lng,label:i+1}));
+    const pts=plan.stops.map((s,i)=>({lat:s.lat,lng:s.lng,label:i+1,name:s.name,isStart:s.isStart}));
     const total=plan.totalDistanceKm, dur=plan.totalDurationMin;
     let html='<div class="card"><b>路线概览</b><div class="hint">真实驾车总里程 <b class="ok">'+total+' km</b> · 预计耗时 <b class="ok">'+dur+' 分钟</b> · 已解析 '+plan.resolvedCount+' / '+(plan.resolvedCount+plan.unresolvedCount)+' 个站点</div>';
     if(plan.unresolved&&plan.unresolved.length) html+='<div class="err">未解析：'+plan.unresolved.map(u=>u.name).join("、")+'</div>';
