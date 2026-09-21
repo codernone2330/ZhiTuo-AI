@@ -12,6 +12,27 @@
 
 ## 后端快速启动
 
+### Windows 一键启动
+
+安装并启动 Docker Desktop 后，直接双击仓库根目录的：
+
+```text
+start.cmd
+```
+
+脚本会自动检查 Docker、创建本地 `.env`、构建并启动 API/PostgreSQL/Redis、
+执行数据库迁移与初始化、等待健康检查通过，并打开 API 文档。
+
+停止服务时双击：
+
+```text
+stop.cmd
+```
+
+停止脚本不会删除 PostgreSQL 和 Redis 数据卷。
+
+### 命令行启动
+
 ```powershell
 Copy-Item .env.example .env
 docker compose up --build
