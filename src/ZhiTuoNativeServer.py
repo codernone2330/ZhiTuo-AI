@@ -32,6 +32,7 @@ from xml.etree import ElementTree
 
 
 ROOT = Path(__file__).resolve().parent
+DATA_ROOT = ROOT.parent / "data"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("ZHITUO_PORT", "8766"))
 DEFAULT_CREDENTIALS_DOCX = Path(
@@ -39,7 +40,28 @@ DEFAULT_CREDENTIALS_DOCX = Path(
 )
 QCC_ENDPOINT = "https://api.qichacha.com/FuzzySearch/GetList"
 QCC_API_CODE = "886"
-DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions"
+AI_PROVIDERS: dict[str, dict[str, Any]] = {
+    "deepseek": {
+        "name": "DeepSeek",
+        "endpoint": "https://api.deepseek.com/chat/completions",
+        "models": {"deepseek-v4-flash", "deepseek-v4-pro"},
+    },
+    "qwen": {
+        "name": "Qwen · 阿里云百炼",
+        "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "models": {"qwen3.8-flash", "qwen3.7-plus", "qwen3.8-max"},
+    },
+    "glm": {
+        "name": "GLM · 智谱 AI",
+        "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "models": {"glm-4.5-flash", "glm-4.5-air", "glm-4.5"},
+    },
+    "kimi": {
+        "name": "Kimi · Moonshot",
+        "endpoint": "https://api.moonshot.cn/v1/chat/completions",
+        "models": {"moonshot-v1-auto", "kimi-k2-turbo-preview", "moonshot-v1-128k"},
+    },
+}
 MAX_BODY_BYTES = 64 * 1024
 CACHE_SECONDS = 300
 RESULT_LIMIT = 5
@@ -262,13 +284,18 @@ def qcc_fuzzy_search(search_term: str, page_index: int = 1) -> dict[str, Any]:
     return result
 
 
-def deepseek_chat(api_key: str, model: str, messages: list[dict[str, str]]) -> dict[str, Any]:
+def ai_chat(api_key: str, provider: str, model: str, messages: list[dict[str, str]]) -> dict[str, Any]:
     clean_key = str(api_key or "").strip()
-    clean_model = str(model or "deepseek-v4-flash").strip()
+    clean_provider = str(provider or "deepseek").strip().lower()
+    provider_config = AI_PROVIDERS.get(clean_provider)
+    if not provider_config:
+        raise AiApiError("不支持所选 AI 平台。", code="INVALID_PROVIDER", http_status=HTTPStatus.BAD_REQUEST)
+    provider_name = str(provider_config["name"])
+    clean_model = str(model or "").strip()
     if len(clean_key) < 12 or len(clean_key) > 256:
-        raise AiApiError("DeepSeek API Key 格式无效。", code="INVALID_API_KEY", http_status=HTTPStatus.BAD_REQUEST)
-    if not re.fullmatch(r"[A-Za-z0-9._-]{2,80}", clean_model):
-        raise AiApiError("DeepSeek 模型名称格式无效。", code="INVALID_MODEL", http_status=HTTPStatus.BAD_REQUEST)
+        raise AiApiError(f"{provider_name} API Key 格式无效。", code="INVALID_API_KEY", http_status=HTTPStatus.BAD_REQUEST)
+    if clean_model not in provider_config["models"]:
+        raise AiApiError(f"{provider_name} 不支持所选模型或模型已下线。", code="INVALID_MODEL", http_status=HTTPStatus.BAD_REQUEST)
     if not isinstance(messages, list) or not messages:
         raise AiApiError("对话消息不能为空。", code="INVALID_MESSAGES", http_status=HTTPStatus.BAD_REQUEST)
 
@@ -294,7 +321,7 @@ def deepseek_chat(api_key: str, model: str, messages: list[dict[str, str]]) -> d
         ensure_ascii=False,
     ).encode("utf-8")
     request = urllib.request.Request(
-        DEEPSEEK_ENDPOINT,
+        str(provider_config["endpoint"]),
         data=body,
         method="POST",
         headers={
@@ -311,28 +338,34 @@ def deepseek_chat(api_key: str, model: str, messages: list[dict[str, str]]) -> d
         provider_message = ""
         try:
             error_payload = json.loads(exc.read().decode("utf-8", errors="replace"))
-            provider_message = str((error_payload.get("error") or {}).get("message") or "")
-        except (json.JSONDecodeError, AttributeError, OSError):
+            error_value = error_payload.get("error")
+            if isinstance(error_value, dict):
+                provider_message = str(error_value.get("message") or error_value.get("msg") or "")
+            else:
+                provider_message = str(error_value or error_payload.get("message") or error_payload.get("msg") or "")
+        except (json.JSONDecodeError, AttributeError, OSError, TypeError):
             provider_message = ""
         if exc.code in {401, 403}:
-            raise AiApiError("DeepSeek API Key 无效或没有模型权限。", code="AI_AUTH_FAILED", http_status=HTTPStatus.UNAUTHORIZED) from exc
+            raise AiApiError(f"{provider_name} API Key 无效，或该账号没有所选模型权限。", code="AI_AUTH_FAILED", http_status=HTTPStatus.UNAUTHORIZED) from exc
         if exc.code == 429:
-            raise AiApiError("DeepSeek 请求过于频繁或账户余额不足。", code="AI_RATE_LIMITED", http_status=HTTPStatus.TOO_MANY_REQUESTS) from exc
-        raise AiApiError(provider_message or f"DeepSeek 服务返回 HTTP {exc.code}。") from exc
+            raise AiApiError(f"{provider_name} 请求过于频繁、额度耗尽或账户余额不足。", code="AI_RATE_LIMITED", http_status=HTTPStatus.TOO_MANY_REQUESTS) from exc
+        if exc.code == 404:
+            raise AiApiError(f"{provider_name} 未找到模型 {clean_model}；请确认 API Key 所属平台与模型选择一致。", code="AI_MODEL_NOT_FOUND", http_status=HTTPStatus.BAD_GATEWAY) from exc
+        raise AiApiError(provider_message or f"{provider_name} 服务返回 HTTP {exc.code}。") from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise AiApiError("暂时无法连接 DeepSeek 服务，请检查网络后重试。", code="AI_UNREACHABLE") from exc
+        raise AiApiError(f"暂时无法连接 {provider_name}，请检查网络或代理设置后重试。", code="AI_UNREACHABLE") from exc
 
     try:
         payload = json.loads(raw)
         content = str(payload["choices"][0]["message"]["content"] or "").strip()
     except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
-        raise AiApiError("DeepSeek 返回了无法解析的响应。", code="AI_BAD_RESPONSE") from exc
+        raise AiApiError(f"{provider_name} 返回了无法解析的响应。", code="AI_BAD_RESPONSE") from exc
     if not content:
-        raise AiApiError("DeepSeek 本次没有返回有效内容。", code="AI_EMPTY_RESPONSE")
+        raise AiApiError(f"{provider_name} 本次没有返回有效内容。", code="AI_EMPTY_RESPONSE")
     usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
     return {
         "ok": True,
-        "provider": "DeepSeek",
+        "provider": provider_name,
         "model": str(payload.get("model") or clean_model),
         "content": content,
         "usage": {
@@ -347,7 +380,7 @@ class ZhituoHandler(SimpleHTTPRequestHandler):
     server_version = "ZhituoLocal/1.0"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, directory=str(ROOT), **kwargs)
+        super().__init__(*args, directory=str(DATA_ROOT), **kwargs)
 
     def end_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -355,6 +388,7 @@ class ZhituoHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
     def _send_json(self, status: int, payload: dict[str, Any]) -> None:
@@ -417,26 +451,35 @@ class ZhituoHandler(SimpleHTTPRequestHandler):
             )
             return
         if path == "/":
-            self.path = "/" + urllib.parse.quote("智拓商机作战助手-完整版.html")
+            self.path = "/" + urllib.parse.quote("智拓商机作战助手-开发版.html")
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
         path = urllib.parse.urlparse(self.path).path
-        if path == "/api/deepseek-chat":
+        if path in {"/api/ai-chat", "/api/deepseek-chat"}:
             try:
                 payload = self._read_json()
+                provider = str(payload.get("provider") or "deepseek")
+                model = str(payload.get("model") or "deepseek-v4-flash")
+                if path == "/api/deepseek-chat":
+                    provider = "deepseek"
+                    if model == "deepseek-chat":
+                        model = "deepseek-v4-flash"
+                    elif model == "deepseek-reasoner":
+                        model = "deepseek-v4-pro"
                 self._send_json(
                     HTTPStatus.OK,
-                    deepseek_chat(
+                    ai_chat(
                         str(payload.get("apiKey") or ""),
-                        str(payload.get("model") or "deepseek-v4-flash"),
+                        provider,
+                        model,
                         payload.get("messages") if isinstance(payload.get("messages"), list) else [],
                     ),
                 )
-            except AiApiError as exc:
+            except (AiApiError, CompanyApiError) as exc:
                 self._send_json(
                     exc.http_status,
-                    {"ok": False, "error": exc.code, "provider": "DeepSeek", "message": str(exc)},
+                    {"ok": False, "error": exc.code, "provider": "AI", "message": str(exc)},
                 )
             return
         if path != "/api/company-opportunities":
@@ -481,6 +524,7 @@ def main() -> None:
     server = ThreadingHTTPServer((HOST, PORT), ZhituoHandler)
     print(f"智拓商机作战助手已启动：http://{HOST}:{PORT}/")
     print("真实企业数据通道：企查查企业模糊搜索（ApiCode 886）")
+    print("AI 模型通道：DeepSeek / Qwen / GLM / Kimi")
     print("按 Ctrl+C 停止服务。")
     try:
         server.serve_forever()

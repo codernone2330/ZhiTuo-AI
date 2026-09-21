@@ -313,6 +313,9 @@
     .support-hero-icon{width:43px;height:43px;display:grid;place-items:center;flex:none;border-radius:13px;background:linear-gradient(135deg,var(--blue),#6fbb37);color:#fff;font-size:18px;font-weight:900;box-shadow:0 8px 18px rgba(0,133,208,.2)}
     .support-hero b{display:block;font-size:14px}.support-hero p{margin:2px 0 0;color:var(--muted);font-size:11px}
     .support-online{margin-left:auto;display:inline-flex;align-items:center;gap:5px;color:#669c25;font-size:10px;font-weight:800}.support-online:before{content:"";width:7px;height:7px;border-radius:50%;background:#83bf30;box-shadow:0 0 0 4px rgba(131,191,48,.13)}
+    .support-online.waiting{color:#8995a3}.support-online.waiting:before{background:#c9d2da;box-shadow:0 0 0 4px rgba(143,157,170,.11)}
+    .support-online.connecting{color:#3479b8}.support-online.connecting:before{background:#4a98dd;box-shadow:0 0 0 4px rgba(74,152,221,.12);animation:supportPulse 1.1s ease-in-out infinite}
+    @keyframes supportPulse{50%{opacity:.45;transform:scale(.78)}}
     .support-quick{display:flex;gap:6px;margin:11px 0;flex-wrap:wrap}.support-quick button{padding:6px 9px;border:1px solid #d9e7ef;border-radius:999px;background:#fff;color:#4d6a7e;font-size:10px}.support-quick button:hover{border-color:#8ec7df;color:var(--blue)}
     .support-chat{display:grid;gap:10px;max-height:330px;padding:13px;overflow:auto;border:1px solid #e1eaf0;border-radius:12px;background:#f7fafc}
     .support-message{display:flex;gap:8px;align-items:flex-start}.support-message.user{justify-content:flex-end}.support-avatar{width:28px;height:28px;display:grid;place-items:center;flex:none;border-radius:9px;background:linear-gradient(135deg,var(--blue),#62b53a);color:#fff;font-size:10px;font-weight:900}.support-message.user .support-avatar{order:2;background:#dce8f0;color:#4d6578}
@@ -320,6 +323,8 @@
     .support-route{margin-top:7px}.support-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:11px}.support-form .input{height:42px}.support-form .btn{min-width:82px}
     .support-layout{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,.65fr);gap:17px}.support-main{padding:17px}.support-workspace .support-chat{height:470px;max-height:none}.support-side{display:grid;gap:13px;align-content:start}.support-side-card{padding:16px}.support-side-card h3{margin:0 0 8px;font-size:14px}.support-side-card p{margin:0;color:var(--muted);font-size:11px;line-height:1.75}.support-capabilities{display:grid;gap:7px}.support-capability{padding:9px;border:1px solid #e2ebf0;border-radius:9px;background:#f9fbfc;color:#4d6679;font-size:11px}.support-capability b{color:var(--blue)}
     .support-message.report .support-bubble{width:min(100%,620px);max-width:none;padding:0;border:0;background:transparent}
+    .support-message.pending .support-bubble{display:flex;align-items:center;gap:8px;color:#6a7888}.support-typing{display:inline-flex;gap:3px}.support-typing i{width:5px;height:5px;border-radius:50%;background:#7da7c8;animation:supportTyping .95s ease-in-out infinite}.support-typing i:nth-child(2){animation-delay:.14s}.support-typing i:nth-child(3){animation-delay:.28s}@keyframes supportTyping{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-3px);opacity:1}}
+    .deepseek-config{display:grid;gap:14px}.deepseek-status-card{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid #d8e8f2;border-radius:var(--radius-lg);background:var(--cmcc-blue-light)}.deepseek-status-icon{width:38px;height:38px;display:grid;place-items:center;flex:none;border-radius:50%;background:var(--cmcc-blue);color:#fff;font-weight:700}.deepseek-status-copy{min-width:0;flex:1}.deepseek-status-copy b{display:block;color:var(--gray-900);font-size:13px}.deepseek-status-copy span{display:block;margin-top:2px;color:var(--gray-600);font-size:11px}.deepseek-secret{position:relative}.deepseek-secret .input{padding-right:76px}.deepseek-secret button{position:absolute;right:8px;top:50%;transform:translateY(-50%);padding:4px 7px;border:0;border-radius:var(--radius-sm);background:var(--gray-100);color:var(--gray-600);font-size:10px}.deepseek-security{padding:11px 13px;border:1px solid #e5e9ed;border-radius:var(--radius-md);background:var(--gray-50);color:var(--gray-600);font-size:10px;line-height:1.7}.deepseek-test-result{min-height:18px;color:var(--gray-600);font-size:11px}.deepseek-test-result.success{color:#3d7d2a}.deepseek-test-result.error{color:var(--red)}
     .report-card{padding:15px;border:1px solid #cfdff1;border-radius:12px;background:linear-gradient(125deg,#fff,#f4f9ff 64%,#f2f8e9);box-shadow:0 8px 22px rgba(22,76,111,.07)}
     .report-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.report-card-head b{color:#315fc5;font-size:13px}.report-card-head span{color:var(--muted);font-size:9px}
     .report-card-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:11px}.report-card-metric{padding:8px;border:1px solid #e2eaf1;border-radius:8px;background:#fff}.report-card-metric label{display:block;color:var(--muted);font-size:8px}.report-card-metric strong{display:block;margin-top:2px;color:var(--ink);font-size:14px}
@@ -614,6 +619,22 @@
     var STORAGE_KEY="zhituo-org-share-data-v9";
     var SESSION_KEY="zhituo-org-share-session-v1";
     var USER_STORAGE_KEY="zhituo-local-users-v1";
+    var DEEPSEEK_CONFIG_KEY="zhituo-deepseek-config-v1";
+    var AI_CONFIG_KEY="zhituo-ai-model-config-v2";
+    var AI_API_BASE="http://127.0.0.1:8766";
+    var AI_MODELS=[
+      {provider:"deepseek",providerName:"DeepSeek",id:"deepseek-v4-flash",label:"DeepSeek-V4-Flash（快速推荐）"},
+      {provider:"deepseek",providerName:"DeepSeek",id:"deepseek-v4-pro",label:"DeepSeek-V4-Pro（深度推理）"},
+      {provider:"qwen",providerName:"Qwen · 阿里云百炼",id:"qwen3.8-flash",label:"Qwen3.8-Flash（快速推荐）"},
+      {provider:"qwen",providerName:"Qwen · 阿里云百炼",id:"qwen3.7-plus",label:"Qwen3.7-Plus（均衡通用）"},
+      {provider:"qwen",providerName:"Qwen · 阿里云百炼",id:"qwen3.8-max",label:"Qwen3.8-Max（旗舰模型）"},
+      {provider:"glm",providerName:"GLM · 智谱 AI",id:"glm-4.5-flash",label:"GLM-4.5-Flash（快速经济）"},
+      {provider:"glm",providerName:"GLM · 智谱 AI",id:"glm-4.5-air",label:"GLM-4.5-Air（均衡通用）"},
+      {provider:"glm",providerName:"GLM · 智谱 AI",id:"glm-4.5",label:"GLM-4.5-Pro（深度推理）"},
+      {provider:"kimi",providerName:"Kimi · Moonshot",id:"moonshot-v1-auto",label:"Kimi-Auto（自动选择）"},
+      {provider:"kimi",providerName:"Kimi · Moonshot",id:"kimi-k2-turbo-preview",label:"Kimi-K2-Flash（快速推荐）"},
+      {provider:"kimi",providerName:"Kimi · Moonshot",id:"moonshot-v1-128k",label:"Kimi-128K（长文档）"}
+    ];
     var STAGES=["线索入池","已联系","已拜访","方案沟通","商机立项","已成交"];
     var OWNERS=["黄凯","罗雅丽","胡一骏","苏姝","周颖","陈宇","林珊","赵磊"];
     var PRODUCT_RESOURCES=[
@@ -1683,8 +1704,27 @@
         return USERS.find(function(u){return u.id===id;})||null;
       }catch(e){return null;}
     }
+    function loadDeepseekConfig(){
+      try{
+        var parsed=JSON.parse(localStorage.getItem(AI_CONFIG_KEY)||localStorage.getItem(DEEPSEEK_CONFIG_KEY)||"{}");
+        var model=String(parsed.model||"deepseek-v4-flash");
+        if(model==="deepseek-chat")model="deepseek-v4-flash";
+        if(model==="deepseek-reasoner")model="deepseek-v4-pro";
+        var modelInfo=AI_MODELS.find(function(item){return item.id===model;})||AI_MODELS[0];
+        return {apiKey:String(parsed.apiKey||""),provider:modelInfo.provider,model:modelInfo.id,connectedAt:String(parsed.connectedAt||""),lastError:String(parsed.lastError||"")};
+      }catch(e){return {apiKey:"",provider:"deepseek",model:"deepseek-v4-flash",connectedAt:"",lastError:""};}
+    }
+    function saveDeepseekConfig(){localStorage.setItem(AI_CONFIG_KEY,JSON.stringify(deepseekConfig));}
+    function hasDeepseekConfig(){return deepseekConfig.apiKey.trim().length>=12;}
+    function aiModelInfo(model){return AI_MODELS.find(function(item){return item.id===model;})||AI_MODELS[0];}
+    function deepseekModelLabel(model){return aiModelInfo(model).label;}
+    function aiProviderName(provider){var match=AI_MODELS.find(function(item){return item.provider===provider;});return match?match.providerName:"AI 平台";}
+    function aiModelOptionsHtml(selected){var groups=[],byProvider={};AI_MODELS.forEach(function(item){if(!byProvider[item.provider]){byProvider[item.provider]=[];groups.push(item.provider);}byProvider[item.provider].push(item);});return groups.map(function(provider){return '<optgroup label="'+esc(aiProviderName(provider))+'">'+byProvider[provider].map(function(item){return '<option value="'+esc(item.id)+'" '+(item.id===selected?"selected":"")+'>'+esc(item.label)+'</option>';}).join("")+'</optgroup>';}).join("");}
+    function deepseekApiUrl(){return AI_API_BASE+"/api/ai-chat";}
     var currentUser=loadUser();
-    var ui={route:"dashboard",scopeOrgId:currentUser?currentUser.orgId:null,oppQuery:"",oppStage:"all",oppKind:"all",customerQuery:"",customerStage:"all",customerKind:"all",customerPage:1,visitTab:"all",visitCustomerId:"",weeklyOwner:"all",weeklyAnchor:new Date().toISOString(),supportMessages:[]};
+    var deepseekConfig=loadDeepseekConfig();
+    var deepseekTestDraft=null;
+    var ui={route:"dashboard",scopeOrgId:currentUser?currentUser.orgId:null,oppQuery:"",oppStage:"all",oppKind:"all",customerQuery:"",customerStage:"all",customerKind:"all",customerPage:1,visitTab:"all",visitCustomerId:"",weeklyOwner:"all",weeklyAnchor:new Date().toISOString(),supportMessages:[],supportPending:false};
     function org(id){return ORG_BY_ID[id];}
     function isCustomerManagerUser(user){return !!(user&&user.role==="客户经理");}
     function canManageCustomerWork(user){var unit=user?org(user.orgId):null;return !!(unit&&(unit.level!=="department"||unit.name==="集客部"));}
@@ -2296,7 +2336,7 @@
       layer.classList.add("show");
       var focus=$(".modal input,.modal select,.modal textarea,.modal button");if(focus)focus.focus();
     }
-    function closeModal(){var layer=$("#modalLayer"),returnFocus=modalReturnFocus;if(layer.dataset.context==="user-management"){userManagementAuthorized=false;userManagementActorId="";}delete layer.dataset.aiToken;delete layer.dataset.context;layer.classList.remove("show");modalReturnFocus=null;if(modalCloseTimer)clearTimeout(modalCloseTimer);modalCloseTimer=setTimeout(function(){if(!layer.classList.contains("show")){layer.innerHTML="";if(returnFocus&&document.contains(returnFocus)&&typeof returnFocus.focus==="function")returnFocus.focus();}modalCloseTimer=null;},280);}
+    function closeModal(){var layer=$("#modalLayer"),returnFocus=modalReturnFocus;if(layer.dataset.context==="user-management"){userManagementAuthorized=false;userManagementActorId="";}deepseekTestDraft=null;delete layer.dataset.aiToken;delete layer.dataset.context;layer.classList.remove("show");modalReturnFocus=null;if(modalCloseTimer)clearTimeout(modalCloseTimer);modalCloseTimer=setTimeout(function(){if(!layer.classList.contains("show")){layer.innerHTML="";if(returnFocus&&document.contains(returnFocus)&&typeof returnFocus.focus==="function")returnFocus.focus();}modalCloseTimer=null;},280);}
     function aiLoadingHtml(message,steps){return '<div class="ai-loading"><div><div class="ai-spinner"></div><strong>✦ '+esc(message)+'</strong><ul>'+steps.map(function(step){return '<li>'+esc(step)+'</li>';}).join("")+'</ul></div></div>';}
     function runAiModal(title,message,steps,callback){
       var token=uid("ai");openModal(title,aiLoadingHtml(message,steps),true);$("#modalLayer").dataset.aiToken=token;
@@ -2307,6 +2347,46 @@
     function reportCardHtml(report){return '<article class="report-card"><div class="report-card-head"><div><b>✦ AI 已生成'+(report.kind==="org"?"组织周经分总结":"本周周报")+'</b><br><span>'+esc(report.subject+" · "+report.period)+'</span></div>'+badge("基于真实经营数据","green")+'</div><div class="report-card-metrics">'+report.metrics.map(function(metric){return '<div class="report-card-metric"><label>'+esc(metric.label)+'</label><strong>'+esc(metric.value)+'</strong></div>';}).join("")+'</div>'+(report.warning?'<div class="report-warning">'+esc(report.warning)+'</div>':"")+'<div class="report-card-actions"><button class="btn btn-sm btn-primary" data-action="view-weekly-report" data-id="'+report.id+'">查看完整周报</button><button class="btn btn-sm" data-action="copy-weekly-report" data-id="'+report.id+'">复制周报</button><button class="btn btn-sm" data-action="download-weekly-report" data-id="'+report.id+'">下载 TXT</button><button class="btn btn-sm" data-route="weekly">查看周经分数据</button></div></article>';}
     function findSupportReport(id){var message=ui.supportMessages.find(function(item){return item.report&&item.report.id===id;});return message?message.report:null;}
     function openWeeklyReport(id){var report=findSupportReport(id);if(!report)return toast("周报已失效，请重新生成。","error");openModal(report.title,'<div class="detail-hero"><b>'+esc(report.subject)+'</b><p class="subtitle">'+esc(report.period)+' · 内容只整理系统中的已记录事实</p></div>'+(report.warning?'<div class="report-warning">'+esc(report.warning)+'</div>':"")+'<div class="report-body">'+esc(report.text)+'</div>',true,'<button class="btn" data-action="copy-weekly-report" data-id="'+report.id+'">复制周报</button><button class="btn" data-action="download-weekly-report" data-id="'+report.id+'">下载 TXT</button><button class="btn btn-primary" data-route="weekly">查看周经分数据</button>');}
+    function deepseekBusinessContext(question){
+      var d=derived(),scope=activeScope(),range=getCurrentWeekRange(),week=buildWeeklyContext(scope.id,"",range),q=String(question||"").toLowerCase();
+      var stages=STAGES.map(function(stage){return stage+" "+d.customers.filter(function(c){return c.stage===stage;}).length+"家";}).join("，");
+      var newCount=d.customers.filter(function(c){return c.kind==="新客";}).length;
+      var keywords=q.split(/[\s，。？！、；：,.!?;:]+/).filter(function(word){return word.length>=2;}).slice(0,8);
+      var matched=d.customers.filter(function(c){var haystack=[c.name,c.industry,c.need,c.owner,c.area,c.stage,c.kind].join(" ").toLowerCase();return keywords.some(function(word){return haystack.indexOf(word)>=0;});});
+      var ranked=d.customers.slice().sort(function(a,b){return b.score-a.score;});
+      var selected=[],seen={};matched.concat(ranked).forEach(function(c){if(selected.length>=32||seen[c.id])return;seen[c.id]=1;selected.push(c);});
+      var customerRows=selected.map(function(c){return {name:c.name,kind:c.kind,city:c.city,area:c.area,industry:c.industry,need:c.need,owner:c.owner,stage:c.stage,score:c.score,nextAction:c.nextAction,lastContact:c.lastContact||"未记录"};});
+      var visitRows=scopedVisits().slice().sort(function(a,b){return new Date(b.completedAt||b.time)-new Date(a.completedAt||a.time);}).slice(0,28).map(function(v){return {customer:customerName(v.customerId),owner:v.owner,time:v.time,completedAt:v.completedAt||"",status:activeTaskStatus(v),purpose:v.purpose,outcome:v.outcome||"",dealAmount:Number(v.dealAmount||0),nextAction:v.nextAction||""};});
+      var context=[
+        "你是中国移动‘智拓 AI 助手’，只根据下面提供的当前授权业务数据回答。不得补造客户、拜访、成交或组织数据；数据不足时明确说明。用简洁中文回答，优先给结论，再列依据和下一步建议。不要输出 Markdown 表格。",
+        "权限边界：当前仅允许使用“"+orgPathText(scope.id)+"”及其下级数据。登录人："+currentUser.name+"；角色："+currentUser.role+"。严禁声称看到了授权范围之外的数据。",
+        "数据最小化：上下文不含客户联系人和电话号码。不得要求或推断未提供的个人敏感信息。",
+        "当前概览：授权客户 "+d.customers.length+" 家（新客 "+newCount+" 家，猎户 "+(d.customers.length-newCount)+" 家）；高优先级待跟进 "+d.high.length+" 家；待办拜访 "+d.pending.length+" 个；已完成拜访 "+d.completed.length+" 个；转化率 "+d.conversion.toFixed(1)+"%。",
+        "阶段分布："+stages+"。",
+        "本周事实：完成拜访 "+(week?week.completedVisitCount:0)+" 次，覆盖客户 "+(week?week.visitedCustomerCount:0)+" 家，成交 "+(week?week.deals.length:0)+" 单，成交额 "+formatCurrency(week?week.dealAmount:0)+"，下周已排期 "+(week?week.nextWeekVisits.length:0)+" 项。",
+        "与问题最相关及高评分客户（最多32家）："+JSON.stringify(customerRows),
+        "最近拜访与任务（最多28条）："+JSON.stringify(visitRows),
+        "用户问题："+String(question||"")
+      ].join("\n");
+      return context.slice(0,11800);
+    }
+    function requestDeepseek(apiKey,model,messages){
+      var info=aiModelInfo(model);
+      return fetch(deepseekApiUrl(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey:String(apiKey||"").trim(),provider:info.provider,model:info.id,messages:messages})}).then(function(response){
+        return response.text().then(function(raw){var payload={};try{payload=JSON.parse(raw||"{}");}catch(e){}if(!response.ok||!payload.ok)throw new Error(payload.message||("AI 服务返回 HTTP "+response.status));return payload;});
+      });
+    }
+    function deepseekConfigModal(){
+      deepseekTestDraft=null;
+      var configured=hasDeepseekConfig(),connected=!!deepseekConfig.connectedAt,status=connected?"已连接":configured?"已配置，待验证":"尚未配置",providerName=aiProviderName(deepseekConfig.provider);
+      openModal("配置 AI 模型",'<form id="deepseekConfigForm" class="deepseek-config"><div class="deepseek-status-card"><div class="deepseek-status-icon">AI</div><div class="deepseek-status-copy"><b>'+esc(status)+'</b><span>'+(connected?esc(providerName+" · "+deepseekModelLabel(deepseekConfig.model)+" · 最近连接 "+fmtDateTime(deepseekConfig.connectedAt)):"可选择 DeepSeek、Qwen、GLM 或 Kimi 进行真实大模型问答")+'</span></div></div><label class="field"><span class="field-label">模型平台与模型</span><select class="select" id="deepseekModel" name="model">'+aiModelOptionsHtml(deepseekConfig.model)+'</select></label><label class="field"><span class="field-label"><span id="aiProviderKeyLabel">'+esc(providerName)+'</span> API Key <span class="required">*</span></span><div class="deepseek-secret"><input class="input" id="deepseekApiKey" name="apiKey" type="password" value="'+esc(deepseekConfig.apiKey)+'" autocomplete="off" placeholder="请输入所选平台的 API Key" minlength="12" maxlength="256" required><button type="button" data-action="toggle-deepseek-key">显示</button></div></label><div class="deepseek-security"><b>选择说明：</b>不同平台的 API Key 不能混用。Qwen 使用阿里云百炼兼容接口，GLM 使用智谱开放平台，Kimi 使用 Moonshot 开放平台。<br><b>数据与密钥：</b>API Key 仅保存在当前浏览器，本地后端不会写入日志；问答只发送授权范围内的必要经营字段，不发送联系人和电话。正式生产环境应改为服务端密钥托管并完成企业数据合规评审。</div><div class="deepseek-test-result" id="deepseekTestResult" aria-live="polite">'+(deepseekConfig.lastError?esc(deepseekConfig.lastError):"请选择与 API Key 对应的平台模型，再测试连接。")+'</div><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><button class="btn btn-danger" type="button" data-action="clear-deepseek-config"'+(configured?"":" disabled")+'>清除配置</button><div style="display:flex;gap:8px"><button class="btn" type="button" data-action="test-deepseek">测试连接</button><button class="btn btn-primary" type="submit">保存配置</button></div></div></form>');
+    }
+    function testDeepseekConnection(){
+      var key=$("#deepseekApiKey"),model=$("#deepseekModel"),result=$("#deepseekTestResult"),button=$('[data-action="test-deepseek"]');if(!key||!model||!result)return;
+      if(key.value.trim().length<12){result.className="deepseek-test-result error";result.textContent="请输入所选平台的有效 API Key。";key.focus();return;}
+      var info=aiModelInfo(model.value);result.className="deepseek-test-result";result.textContent="正在连接 "+info.providerName+"…";if(button)button.disabled=true;
+      requestDeepseek(key.value,model.value,[{role:"system",content:"你是连接测试助手，只回复：连接成功"},{role:"user",content:"测试连接"}]).then(function(payload){deepseekTestDraft={apiKey:key.value.trim(),provider:info.provider,model:model.value,connectedAt:new Date().toISOString()};result.className="deepseek-test-result success";result.textContent="连接成功 · "+info.providerName+" · "+deepseekModelLabel(model.value)+" · "+(payload.usage&&payload.usage.totalTokens?payload.usage.totalTokens+" tokens":"服务响应正常");}).catch(function(error){deepseekTestDraft=null;result.className="deepseek-test-result error";result.textContent=error.message||"连接失败，请检查平台、模型、本地服务和 API Key。";}).finally(function(){if(button)button.disabled=false;});
+    }
     function aiSupportAnswer(query){
       var q=String(query||"").trim(),d=derived(),scope=activeScope(),range=getCurrentWeekRange(),targetOrg=requestedOrganization(q),targetOwner=requestedOwner(q),weeklyIntent=/周报|本周|这周|下周|周经分|周经营|经营复盘|周总结/.test(q);
       if(targetOrg&&!isWithin(targetOrg.id,currentUser.orgId))return {text:"当前身份无权查看该组织的经营数据。"};
@@ -2343,15 +2423,22 @@
       return {text:"我可以查询当前组织的客户、商机、拜访与成交数据，生成个人周报和组织周经分总结，并指导使用商机更新、CRM、拜访任务、组织权限和数据管理。",route:"weekly",label:"查看周经分"};
     }
     function supportView(){
-      if(!ui.supportMessages.length)ui.supportMessages.push({role:"assistant",text:"您好，"+currentUser.name+"。我是智拓 AI 助手，可以查询经营数据，并根据系统中的真实记录生成个人周报和组织周总结。"});
-      var messages=ui.supportMessages.map(function(message){var report=message.report?reportCardHtml(message.report):"";return '<div class="support-message '+(message.role==="user"?"user":"assistant")+(message.report?" report":"")+'"><span class="support-avatar">'+(message.role==="user"?esc(currentUser.name.slice(0,1)):"AI")+'</span><div class="support-bubble">'+(report||esc(message.text)+(message.route?'<div class="support-route"><button type="button" class="btn btn-sm" data-action="support-route" data-target-route="'+message.route+'">'+esc(message.label||"前往查看")+' →</button></div>':""))+'</div></div>';}).join("");
+      if(!ui.supportMessages.length)ui.supportMessages.push({role:"assistant",text:hasDeepseekConfig()?"您好，"+currentUser.name+"。我是智拓 AI 助手，将在当前组织权限范围内查询经营数据、回答问题并生成周报。":"您好，"+currentUser.name+"。我是智拓 AI 助手。配置 AI 模型后，我会在当前组织权限范围内查询经营数据、回答问题并生成周报。"});
+      var messages=ui.supportMessages.map(function(message){var report=message.report?reportCardHtml(message.report):"",content=message.pending?'<span class="support-typing"><i></i><i></i><i></i></span><span>正在结合授权经营数据思考…</span>':report||esc(message.text)+(message.route?'<div class="support-route"><button type="button" class="btn btn-sm" data-action="support-route" data-target-route="'+message.route+'">'+esc(message.label||"前往查看")+' →</button></div>':"");return '<div class="support-message '+(message.role==="user"?"user":"assistant")+(message.report?" report":"")+(message.pending?" pending":"")+'"><span class="support-avatar">'+(message.role==="user"?esc(currentUser.name.slice(0,1)):"AI")+'</span><div class="support-bubble">'+content+'</div></div>';}).join("");
       var quick=["我这周拜访了哪些客户？","哪些商机超过30天没有推进？","生成我的本周周报","生成下周工作计划"];if(!isCustomerManagerUser(currentUser))quick.push("生成当前组织本周总结");var quickHtml=quick.map(function(question){return '<button type="button" data-action="support-ask" data-query="'+esc(question)+'">'+esc(question)+'</button>';}).join("");
       var d=derived(),scope=activeScope(),week=buildWeeklyContext(scope.id,"",getCurrentWeekRange());
-      return head('<button class="btn" data-action="clear-support">清空对话</button>')+'<div class="support-layout support-workspace"><section class="card support-main"><div class="support-hero"><div class="support-hero-icon">AI</div><div><b>中国移动 · 智拓 AI 助手</b><p>系统先计算经营事实，AI 再整理周报和周经分总结</p></div><span class="support-online">在线</span></div><div class="support-quick">'+quickHtml+'</div><div class="support-chat" id="supportChat" aria-live="polite">'+messages+'</div><form class="support-form" id="supportForm"><input class="input" name="question" aria-label="向智拓 AI 助手提问" maxlength="120" autocomplete="off" placeholder="例如：我这周拜访了哪些客户？" required><button class="btn btn-refresh" type="submit">发送</button></form><div class="muted" style="margin-top:9px;font-size:10px">回答与报告仅使用当前授权范围内的客户、拜访、成交和 CRM 历史，不会虚构业务事实。</div></section><aside class="support-side"><section class="card support-side-card"><h3>当前经营范围</h3><p>'+esc(currentUser.name+" · "+currentUser.role)+'<br>'+esc(orgPathText(scope.id))+'</p><div class="detail-grid" style="grid-template-columns:repeat(2,1fr)"><div class="kv"><label>授权客户</label><span>'+d.customers.length+'</span></div><div class="kv"><label>待办拜访</label><span>'+d.pending.length+'</span></div><div class="kv"><label>本周完成拜访</label><span>'+week.completedVisitCount+'</span></div><div class="kv"><label>本周成交金额</label><span>'+formatCurrency(week.dealAmount)+'</span></div></div></section><section class="card support-side-card"><h3>我可以帮助您</h3><div class="support-capabilities"><div class="support-capability"><b>01</b> 查询客户、商机、拜访与成交数据</div><div class="support-capability"><b>02</b> 查找超期商机与经营风险</div><div class="support-capability"><b>03</b> 生成个人周报和组织总结</div><div class="support-capability"><b>04</b> 汇总阶段推进与下周排期</div></div></section></aside></div>';
+      var connected=!!deepseekConfig.connectedAt,statusText=ui.supportPending?"连接中":connected?"已连接":hasDeepseekConfig()?"已配置":"待配置",statusClass=ui.supportPending?"connecting":connected?"":"waiting",heroText=connected?aiProviderName(deepseekConfig.provider)+" · "+deepseekModelLabel(deepseekConfig.model)+" 已连接":hasDeepseekConfig()?aiProviderName(deepseekConfig.provider)+" 已配置，可开始真实 AI 问答":"请先选择 AI 平台、模型并配置对应的 API Key";
+      return head('<button class="btn btn-refresh" data-action="configure-deepseek">⚙ 配置 AI 模型</button>')+'<div class="support-layout support-workspace"><section class="card support-main"><div class="support-hero"><div class="support-hero-icon">AI</div><div><b>中国移动 · 智拓 AI 助手</b><p>'+esc(heroText)+'</p></div><span class="support-online '+statusClass+'">'+statusText+'</span></div><div class="support-quick">'+quickHtml+'</div><div class="support-chat" id="supportChat" aria-live="polite">'+messages+'</div><form class="support-form" id="supportForm"><input class="input" name="question" aria-label="向智拓 AI 助手提问" maxlength="120" autocomplete="off" placeholder="例如：我这周拜访了哪些客户？" '+(ui.supportPending?"disabled":"")+' required><button class="btn btn-refresh" type="submit" '+(ui.supportPending?"disabled":"")+'>发送</button></form><div class="muted" style="margin-top:9px;font-size:10px">回答只使用当前授权范围内的客户、拜访、成交和 CRM 记录；发送给大模型的上下文不包含客户联系人与电话号码。</div></section><aside class="support-side"><section class="card support-side-card"><h3>当前经营范围</h3><p>'+esc(currentUser.name+" · "+currentUser.role)+'<br>'+esc(orgPathText(scope.id))+'</p><div class="detail-grid" style="grid-template-columns:repeat(2,1fr)"><div class="kv"><label>授权客户</label><span>'+d.customers.length+'</span></div><div class="kv"><label>待办拜访</label><span>'+d.pending.length+'</span></div><div class="kv"><label>本周完成拜访</label><span>'+week.completedVisitCount+'</span></div><div class="kv"><label>本周成交金额</label><span>'+formatCurrency(week.dealAmount)+'</span></div></div></section><section class="card support-side-card"><h3>我可以帮助您</h3><div class="support-capabilities"><div class="support-capability"><b>01</b> 查询客户、商机、拜访与成交数据</div><div class="support-capability"><b>02</b> 查找超期商机与经营风险</div><div class="support-capability"><b>03</b> 生成个人周报和组织总结</div><div class="support-capability"><b>04</b> 汇总阶段推进与下周排期</div></div></section></aside></div>';
     }
     function sendSupportMessage(question){
-      var text=String(question||"").trim();if(!text)return;
-      ui.supportMessages.push({role:"user",text:text});var answer=aiSupportAnswer(text);ui.supportMessages.push({role:"assistant",text:answer.text,route:answer.route,label:answer.label,report:answer.report||null});render();var chat=$("#supportChat");if(chat)chat.scrollTop=chat.scrollHeight;
+      var text=String(question||"").trim();if(!text||ui.supportPending)return;
+      ui.supportMessages.push({role:"user",text:text});
+      if(!hasDeepseekConfig()){
+        var localAnswer=aiSupportAnswer(text);ui.supportMessages.push({role:"assistant",text:localAnswer.text,route:localAnswer.route,label:localAnswer.label,report:localAnswer.report||null});render();var localChat=$("#supportChat");if(localChat)localChat.scrollTop=localChat.scrollHeight;toast("尚未配置 AI 模型，已使用本地事实引擎回答。","error");return;
+      }
+      var pending={role:"assistant",text:"",pending:true};ui.supportMessages.push(pending);ui.supportPending=true;render();var chat=$("#supportChat");if(chat)chat.scrollTop=chat.scrollHeight;
+      var history=ui.supportMessages.filter(function(item){return !item.pending&&!item.report;}).slice(-8).map(function(item){return {role:item.role,content:String(item.text||"")};});
+      requestDeepseek(deepseekConfig.apiKey,deepseekConfig.model,[{role:"system",content:deepseekBusinessContext(text)}].concat(history)).then(function(payload){pending.text=String(payload.content||"本次没有返回有效内容。");delete pending.pending;deepseekConfig.connectedAt=new Date().toISOString();deepseekConfig.lastError="";saveDeepseekConfig();}).catch(function(error){var fallback=aiSupportAnswer(text);pending.text=aiProviderName(deepseekConfig.provider)+" 暂时无法完成问答（"+(error.message||"连接失败")+"）。以下为本地事实引擎结果：\n\n"+fallback.text;pending.route=fallback.route;pending.label=fallback.label;pending.report=fallback.report||null;delete pending.pending;deepseekConfig.connectedAt="";deepseekConfig.lastError=error.message||"连接失败";saveDeepseekConfig();}).finally(function(){ui.supportPending=false;render();var doneChat=$("#supportChat");if(doneChat)doneChat.scrollTop=doneChat.scrollHeight;});
     }
     function refreshOpportunityPortfolio(){
       var list=scopedCustomers(),updatedAt=new Date().toISOString(),changed=0;
@@ -2691,6 +2778,10 @@
       }
       else if(name==="logout"){sessionStorage.removeItem(SESSION_KEY);currentUser=null;ui.supportMessages=[];$("#loginLayer").classList.add("show");updateIdentityPreview();}
       else if(name==="identity")identityModal();
+      else if(name==="configure-deepseek")deepseekConfigModal();
+      else if(name==="toggle-deepseek-key"){var keyInput=$("#deepseekApiKey");if(keyInput){keyInput.type=keyInput.type==="password"?"text":"password";action.textContent=keyInput.type==="password"?"显示":"隐藏";}}
+      else if(name==="test-deepseek")testDeepseekConnection();
+      else if(name==="clear-deepseek-config"){if(confirm("确定清除当前浏览器中保存的 AI 平台 API Key 和连接状态吗？")){deepseekConfig={apiKey:"",provider:"deepseek",model:"deepseek-v4-flash",connectedAt:"",lastError:""};localStorage.removeItem(DEEPSEEK_CONFIG_KEY);localStorage.removeItem(AI_CONFIG_KEY);closeModal();render();toast("AI 模型配置已清除。");}}
       else if(name==="support-ask")sendSupportMessage(action.dataset.query||"");
       else if(name==="clear-support"){ui.supportMessages=[];render();}
       else if(name==="support-route"){var supportRoute=action.dataset.targetRoute;go(supportRoute);}
@@ -2765,6 +2856,7 @@
       else if(e.target.id==="completeOutcome"||e.target.id==="completeStage")updateDealFields();
       else if(e.target.id==="userOrgLevel")updateUserOrganizationOptions();
       else if(e.target.id==="userOrgId")updateUserRoleOptions();
+      else if(e.target.id==="deepseekModel"){var selectedInfo=aiModelInfo(e.target.value),providerLabel=$("#aiProviderKeyLabel"),testResult=$("#deepseekTestResult");if(providerLabel)providerLabel.textContent=selectedInfo.providerName;if(testResult){testResult.className="deepseek-test-result";testResult.textContent="请确认输入的是 "+selectedInfo.providerName+" 的 API Key，再测试连接。";}deepseekTestDraft=null;}
       else if(e.target.id==="csvFile"&&e.target.files[0]){var reader=new FileReader();reader.onload=function(){try{var result=importCSV(reader.result);closeModal();render();toast("导入完成：新增 "+result.added+" 条，转人工复核 "+result.review+" 条。");}catch(err){toast(err.message,"error");}};reader.readAsText(e.target.files[0],"UTF-8");}
     });
     document.addEventListener("click",function(e){var tab=e.target.closest("[data-visit-tab]");if(tab){ui.visitTab=tab.dataset.visitTab;render();}});
@@ -2785,6 +2877,12 @@
         var user=authenticateUser($("#loginAccount").value,$("#loginPassword").value);
         if(!user)return toast("账号或口令不正确。","error");
         currentUser=user;sessionStorage.setItem(SESSION_KEY,user.id);ui.scopeOrgId=user.orgId;ui.route="dashboard";ui.weeklyOwner="all";ui.weeklyAnchor=new Date().toISOString();ui.supportMessages=[];$("#loginLayer").classList.remove("show");updateIdentity();render();animatePage();toast("已识别 "+user.name+"，当前部门："+org(user.orgId).name+" · "+user.department);return;
+      }
+      if(e.target.id==="deepseekConfigForm"){
+        var deepseekData=Object.fromEntries(new FormData(e.target)),deepseekKey=String(deepseekData.apiKey||"").trim(),deepseekModel=String(deepseekData.model||""),selectedModelInfo=AI_MODELS.find(function(item){return item.id===deepseekModel;});
+        if(!selectedModelInfo)return toast("请选择受支持的 AI 模型。","error");
+        if(deepseekKey.length<12)return toast("请输入 "+selectedModelInfo.providerName+" 的有效 API Key。","error");
+        var changed=deepseekConfig.apiKey!==deepseekKey||deepseekConfig.model!==deepseekModel,tested=deepseekTestDraft&&deepseekTestDraft.apiKey===deepseekKey&&deepseekTestDraft.model===deepseekModel;deepseekConfig={apiKey:deepseekKey,provider:selectedModelInfo.provider,model:deepseekModel,connectedAt:tested?deepseekTestDraft.connectedAt:changed?"":deepseekConfig.connectedAt,lastError:""};deepseekTestDraft=null;saveDeepseekConfig();closeModal();render();toast(deepseekModelLabel(deepseekModel)+(tested?" 已连接并保存。":" 配置已保存，可以开始真实 AI 问答。"));return;
       }
       if(e.target.id==="supportForm"){
         var supportData=Object.fromEntries(new FormData(e.target));sendSupportMessage(supportData.question);return;
