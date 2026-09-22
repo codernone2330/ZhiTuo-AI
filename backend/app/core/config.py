@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     app_env: str = "local"
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
+    frontend_dir: str | None = None
 
     database_url: str = "postgresql+psycopg://zhituo:zhituo_dev@127.0.0.1:5432/zhituo"
     redis_url: str = "redis://127.0.0.1:6379/0"
@@ -18,6 +19,15 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr = SecretStr("local-development-only-change-me")
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
+    refresh_cookie_secure: bool = False
+
+    bootstrap_admin_username: str = "groupadmin"
+    bootstrap_admin_employee_no: str = "CMCC0001"
+    bootstrap_admin_display_name: str = "集团管理员"
+    bootstrap_admin_password: SecretStr | None = SecretStr("szyd123456")
+    bootstrap_demo_users: bool = True
+    bootstrap_demo_user_password: SecretStr | None = SecretStr("szyd123456")
 
     qcc_app_key: SecretStr | None = None
     qcc_secret_key: SecretStr | None = None

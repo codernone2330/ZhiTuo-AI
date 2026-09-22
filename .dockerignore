@@ -1,0 +1,10 @@
+.git
+.github
+.venv
+.pytest_cache
+**/__pycache__
+**/*.pyc
+.env
+data/*
+!data/智拓商机作战助手-开发版.html
+!data/china-mobile-logo.svg

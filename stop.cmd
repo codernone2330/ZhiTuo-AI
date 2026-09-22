@@ -1,13 +1,15 @@
 @echo off
-chcp 65001 >nul
-title 智拓商机作战助手 - 停止
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\stop.ps1"
-if errorlevel 1 (
+setlocal
+title ZhiTuo AI - Stop
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\stop.ps1"
+set "ZHITUO_EXIT_CODE=%ERRORLEVEL%"
+if not "%ZHITUO_EXIT_CODE%"=="0" (
   echo.
-  echo 停止失败，请保留本窗口中的错误信息。
+  echo Shutdown failed. Keep this window open and review the error above.
   pause
-  exit /b 1
+  exit /b %ZHITUO_EXIT_CODE%
 )
 echo.
-echo 智拓服务已安全停止，数据库数据卷已保留。
+echo ZhiTuo services stopped successfully. Database volumes were preserved.
 pause
+exit /b 0

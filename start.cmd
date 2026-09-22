@@ -1,13 +1,15 @@
 @echo off
-chcp 65001 >nul
-title 智拓商机作战助手 - 启动
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start.ps1"
-if errorlevel 1 (
+setlocal
+title ZhiTuo AI - Start
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start.ps1" %*
+set "ZHITUO_EXIT_CODE=%ERRORLEVEL%"
+if not "%ZHITUO_EXIT_CODE%"=="0" (
   echo.
-  echo 启动失败，请保留本窗口中的错误信息。
+  echo Startup failed. Keep this window open and review the error above.
   pause
-  exit /b 1
+  exit /b %ZHITUO_EXIT_CODE%
 )
 echo.
-echo 智拓服务已成功启动。
+echo ZhiTuo services started successfully.
 pause
+exit /b 0

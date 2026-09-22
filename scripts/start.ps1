@@ -45,6 +45,19 @@ if (-not (Test-Path -LiteralPath ".env")) {
     Write-Host "Created .env from .env.example. Replace local secrets before shared testing." -ForegroundColor Yellow
 }
 
+# Backward-compatible local secret loading: keep the Tencent key out of the image
+# while allowing the existing data/TenCentApiKey.txt file to power the unified API.
+if ([string]::IsNullOrWhiteSpace($env:TENCENT_MAP_KEY)) {
+    $tencentKeyFile = Join-Path $repositoryRoot "data\TenCentApiKey.txt"
+    if (Test-Path -LiteralPath $tencentKeyFile) {
+        $tencentKey = (Get-Content -LiteralPath $tencentKeyFile -Raw).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($tencentKey)) {
+            $env:TENCENT_MAP_KEY = $tencentKey
+            Write-Host "Tencent Maps key loaded for the backend." -ForegroundColor Green
+        }
+    }
+}
+
 Write-Host "[3/5] Validating Compose configuration..." -ForegroundColor Cyan
 Invoke-Docker -Arguments @("compose", "config", "--quiet")
 
@@ -81,10 +94,11 @@ Invoke-Docker -Arguments @("compose", "ps")
 
 Write-Host ""
 Write-Host "ZhiTuo backend is ready." -ForegroundColor Green
+Write-Host "Application: http://127.0.0.1:8000/app/"
 Write-Host "API docs: http://127.0.0.1:8000/docs"
 Write-Host "Health check: http://127.0.0.1:8000/api/v1/health/ready"
 Write-Host "To stop the service, double-click stop.cmd."
 
 if (-not $NoBrowser) {
-    Start-Process "http://127.0.0.1:8000/docs"
+    Start-Process "http://127.0.0.1:8000/app/"
 }

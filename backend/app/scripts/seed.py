@@ -2,9 +2,12 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
+from app.core.security import hash_password, verify_password
 from app.db.session import SessionLocal
-from app.modules.auth.models import Role
+from app.modules.auth.models import Role, UserRole
 from app.modules.organizations.models import Organization
+from app.modules.users.models import User
 
 DEPARTMENTS = [
     ("general", "综合部"),
@@ -76,6 +79,55 @@ class OrgSeed:
     sort_order: int = 0
 
 
+@dataclass(frozen=True)
+class UserSeed:
+    username: str
+    employee_no: str
+    display_name: str
+    organization_code: str
+    role_code: str
+
+
+DEMO_USERS = [
+    UserSeed("szyd", "CMCCSUPER001", "超级管理员", "cmcc", "super_admin"),
+    UserSeed("gdmanager", "CMCC440001", "陈晨", "cmcc-gd", "org_admin"),
+    UserSeed("huangkai", "CMCC440301", "黄凯", "cmcc-gd-sz", "org_admin"),
+    UserSeed("luoyali", "CMCC440101", "罗雅丽", "cmcc-gd-gz", "org_admin"),
+    UserSeed("linzhiyuan", "CMCC441901", "林志远", "cmcc-gd-dg", "org_admin"),
+    UserSeed("futianleader", "CMCC440304", "周颖", "cmcc-gd-sz-ft", "org_admin"),
+    UserSeed("tianheleader", "CMCC440106", "郑雅文", "cmcc-gd-gz-th", "org_admin"),
+    UserSeed("dongguanleader", "CMCC441904", "陈宇", "cmcc-gd-dg-cq", "org_admin"),
+    UserSeed(
+        "futianenterprise",
+        "CMCC440305",
+        "林珊",
+        "cmcc-gd-sz-ft-enterprise",
+        "department_manager",
+    ),
+    UserSeed(
+        "huyijun",
+        "CMCC440306",
+        "胡一骏",
+        "cmcc-gd-sz-ft-enterprise",
+        "customer_manager",
+    ),
+    UserSeed(
+        "wuweichao",
+        "CMCC440107",
+        "伍炜超",
+        "cmcc-gd-gz-th-enterprise",
+        "customer_manager",
+    ),
+    UserSeed(
+        "caomeiling",
+        "CMCC441905",
+        "曹美玲",
+        "cmcc-gd-dg-cq-enterprise",
+        "customer_manager",
+    ),
+]
+
+
 def build_organizations() -> list[OrgSeed]:
     result = [
         OrgSeed("cmcc", "中国移动集团", "group", None, "/cmcc", sort_order=1),
@@ -142,6 +194,7 @@ def build_organizations() -> list[OrgSeed]:
 
 def seed_roles(session) -> int:
     definitions = [
+        ("super_admin", "超级管理员", "管理全系统登录用户、角色与组织归属"),
         ("group_admin", "集团经营管理员", "管理集团及全部下级组织"),
         ("org_admin", "组织管理员", "管理本组织及全部下级组织"),
         ("department_manager", "部门负责人", "管理本部门及下属客户经理工作"),
@@ -189,11 +242,112 @@ def seed_organizations(session) -> int:
     return created
 
 
+def seed_bootstrap_admin(session) -> bool:
+    settings = get_settings()
+    if settings.app_env.lower() not in {"local", "development", "test"}:
+        return False
+    if settings.bootstrap_admin_password is None:
+        return False
+    password = settings.bootstrap_admin_password.get_secret_value()
+    if len(password) < 8:
+        raise RuntimeError("BOOTSTRAP_ADMIN_PASSWORD must contain at least 8 characters")
+    organization = session.scalar(select(Organization).where(Organization.code == "cmcc"))
+    role = session.scalar(select(Role).where(Role.code == "group_admin"))
+    if organization is None or role is None:
+        raise RuntimeError("Organizations and roles must be seeded before the bootstrap admin")
+    user = session.scalar(select(User).where(User.username == settings.bootstrap_admin_username))
+    created = user is None
+    if user is None:
+        user = User(
+            username=settings.bootstrap_admin_username,
+            employee_no=settings.bootstrap_admin_employee_no,
+            display_name=settings.bootstrap_admin_display_name,
+            password_hash=hash_password(password),
+            organization_id=organization.id,
+            is_active=True,
+        )
+        session.add(user)
+        session.flush()
+    assignment = session.scalar(
+        select(UserRole).where(UserRole.user_id == user.id, UserRole.role_id == role.id)
+    )
+    if assignment is None:
+        session.add(UserRole(user_id=user.id, role_id=role.id))
+    return created
+
+
+def seed_demo_users(session, password: str) -> int:
+    """Create local demonstration identities without overwriting managed users."""
+    if len(password) < 8:
+        raise RuntimeError("BOOTSTRAP_DEMO_USER_PASSWORD must contain at least 8 characters")
+    organizations = {
+        item.code: item for item in session.scalars(select(Organization)).all()
+    }
+    roles = {item.code: item for item in session.scalars(select(Role)).all()}
+    created = 0
+    for item in DEMO_USERS:
+        if session.scalar(select(User).where(User.username == item.username)) is not None:
+            continue
+        organization = organizations.get(item.organization_code)
+        role = roles.get(item.role_code)
+        if organization is None or role is None:
+            raise RuntimeError(
+                f"Demo user {item.username} references missing organization or role"
+            )
+        user = User(
+            username=item.username,
+            employee_no=item.employee_no,
+            display_name=item.display_name,
+            password_hash=hash_password(password),
+            organization_id=organization.id,
+            is_active=True,
+        )
+        session.add(user)
+        session.flush()
+        session.add(UserRole(user_id=user.id, role_id=role.id))
+        created += 1
+    return created
+
+
+def unify_local_user_passwords(session, password: str) -> int:
+    """Keep every local demonstration account on the agreed shared password."""
+    if len(password) < 8:
+        raise RuntimeError("The unified local password must contain at least 8 characters")
+    updated = 0
+    for user in session.scalars(select(User)).all():
+        if verify_password(password, user.password_hash):
+            continue
+        user.password_hash = hash_password(password)
+        updated += 1
+    return updated
+
+
 def main() -> None:
+    settings = get_settings()
     with SessionLocal.begin() as session:
         role_count = seed_roles(session)
+        session.flush()
         organization_count = seed_organizations(session)
-    print(f"Seed completed: {organization_count} organizations, {role_count} roles created.")
+        admin_created = seed_bootstrap_admin(session)
+        demo_user_count = 0
+        password_sync_count = 0
+        if (
+            settings.app_env.lower() in {"local", "development", "test"}
+            and settings.bootstrap_demo_users
+            and settings.bootstrap_demo_user_password is not None
+        ):
+            demo_user_count = seed_demo_users(
+                session, settings.bootstrap_demo_user_password.get_secret_value()
+            )
+            password_sync_count = unify_local_user_passwords(
+                session, settings.bootstrap_demo_user_password.get_secret_value()
+            )
+    print(
+        f"Seed completed: {organization_count} organizations, {role_count} roles created, "
+        f"bootstrap admin {'created' if admin_created else 'unchanged'}, "
+        f"{demo_user_count} demo users created, "
+        f"{password_sync_count} local passwords synchronized。"
+    )
 
 
 if __name__ == "__main__":
