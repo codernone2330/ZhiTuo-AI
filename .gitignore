@@ -1,0 +1,14 @@
+# Local runtime state and configuration (existing map files remain untouched)
+.env
+data/*.db
+data/*.db-*
+__pycache__/
+*.pyc
+
+# Office / OS / cloud-sync temporary files
+~$*
+.~lock.*
+.DS_Store
+Thumbs.db
+*冲突副本*
+*conflict copy*

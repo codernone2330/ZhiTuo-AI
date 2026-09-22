@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
+from zhituo_backend import BackendApp
+
 
 ROOT = Path(__file__).resolve().parent
 DATA_ROOT = ROOT.parent / "data"
@@ -65,6 +67,11 @@ AI_PROVIDERS: dict[str, dict[str, Any]] = {
 MAX_BODY_BYTES = 64 * 1024
 CACHE_SECONDS = 300
 RESULT_LIMIT = 5
+ALLOWED_ORIGINS = {
+    item.strip().rstrip("/")
+    for item in os.environ.get("ZHITUO_ALLOWED_ORIGINS", "http://127.0.0.1:8766,http://localhost:8766").split(",")
+    if item.strip()
+}
 ACTIVE_STATUS_WORDS = ("存续", "在业", "开业", "正常", "有效")
 INACTIVE_STATUS_WORDS = ("注销", "吊销", "撤销", "清算")
 
@@ -102,6 +109,7 @@ class AiApiError(RuntimeError):
 
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _cache_lock = threading.Lock()
+backend_app = BackendApp()
 
 
 def _docx_text(path: Path) -> str:
@@ -383,12 +391,18 @@ class ZhituoHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(DATA_ROOT), **kwargs)
 
     def end_headers(self) -> None:
-        self.send_header("Access-Control-Allow-Origin", "*")
+        # 仅回显受信任的前端来源，避免其他网站借用本机已登录会话调用业务接口。
+        origin = self.headers.get("Origin", "").rstrip("/")
+        if origin in ALLOWED_ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-Id")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
         super().end_headers()
 
     def _send_json(self, status: int, payload: dict[str, Any]) -> None:
@@ -423,12 +437,26 @@ class ZhituoHandler(SimpleHTTPRequestHandler):
             )
         return payload
 
+    def _handle_business_api(self, body: dict[str, Any] | None = None) -> None:
+        """将 /api/v1/ 安全业务接口交由独立后端处理；既有地图/查询接口不受影响。"""
+        parsed = urllib.parse.urlparse(self.path)
+        query = {key: values[-1] for key, values in urllib.parse.parse_qs(parsed.query).items()}
+        headers = {key.lower(): value for key, value in self.headers.items()}
+        status, response = backend_app.handle(
+            self.command, parsed.path, headers, query, body,
+            self.client_address[0] if self.client_address else "",
+        )
+        self._send_json(status, response)
+
     def do_OPTIONS(self) -> None:  # noqa: N802
         self.send_response(HTTPStatus.NO_CONTENT)
         self.end_headers()
 
     def do_GET(self) -> None:  # noqa: N802
         path = urllib.parse.urlparse(self.path).path
+        if path.startswith("/api/v1/"):
+            self._handle_business_api()
+            return
         if path == "/api/health":
             try:
                 credentials = load_qcc_credentials()
@@ -456,6 +484,12 @@ class ZhituoHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urllib.parse.urlparse(self.path).path
+        if path.startswith("/api/v1/"):
+            try:
+                self._handle_business_api(self._read_json())
+            except CompanyApiError as exc:
+                self._send_json(exc.http_status, {"ok": False, "error": {"code": exc.code, "message": str(exc)}})
+            return
         if path in {"/api/ai-chat", "/api/deepseek-chat"}:
             try:
                 payload = self._read_json()
