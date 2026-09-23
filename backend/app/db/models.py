@@ -4,6 +4,7 @@ from app.modules.auth.models import AuthSession, Role, UserRole
 from app.modules.customers.models import Customer, CustomerImportBatch, CustomerRequest
 from app.modules.organizations.models import Organization
 from app.modules.users.models import User
+from app.modules.visits.models import Visit
 
 __all__ = [
     "AuthSession",
@@ -14,4 +15,5 @@ __all__ = [
     "Role",
     "User",
     "UserRole",
+    "Visit",
 ]

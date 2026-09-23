@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import select
 
 from app.modules.organizations.models import Organization
@@ -274,6 +276,18 @@ def test_ownership_requires_direct_supervisor_and_survives_reload(identity_clien
     supervisor = {
         "Authorization": f"Bearer {login(client, 'approving-manager', 'test-admin-password')}"
     }
+    visit = client.post(
+        "/api/v1/visits",
+        headers=applicant,
+        json={
+            "customerId": "c-approval",
+            "ownerName": "申请经理",
+            "time": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            "method": "电话沟通",
+            "purpose": "确认下一步安排",
+        },
+    )
+    assert visit.status_code == 201, visit.text
     created = client.post(
         "/api/v1/customers/c-approval/requests",
         headers=applicant,
@@ -303,6 +317,8 @@ def test_ownership_requires_direct_supervisor_and_survives_reload(identity_clien
     detail = client.get("/api/v1/customers/c-approval", headers=group_headers)
     assert detail.json()["data"]["ownerName"] == "新负责人"
     assert client.get("/api/v1/customers/c-approval", headers=applicant).status_code == 404
+    transferred = client.get(f"/api/v1/visits/{visit.json()['data']['id']}", headers=group_headers)
+    assert transferred.json()["data"]["owner"] == "新负责人"
 
 
 def test_delete_requires_approval_and_is_soft_deleted(identity_client) -> None:

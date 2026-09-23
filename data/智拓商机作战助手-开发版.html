@@ -1703,7 +1703,7 @@
       }catch(e){}
       return buildSeedData();
     }
-    var state=loadState(),legacyCustomerSeed=(state.customers||[]).slice();
+    var state=loadState(),legacyCustomerSeed=(state.customers||[]).slice(),legacyVisitSeed=(state.visits||[]).slice();
     function saveState(){state.meta=state.meta||{};state.meta.total=state.customers.length;localStorage.setItem(STORAGE_KEY,JSON.stringify(state));updateNavCounts();}
     var backendOrganizations=[],backendRoles=[],managedApiUsers=[];
     function backendRoleLabel(code,unit){
@@ -1767,11 +1767,11 @@
     function customerImportPayload(c){
       var unit=org(c.managingOrgId),backendOrg=unit&&backendOrganizations.find(function(item){return item.frontendId===unit.id;});
       if(!backendOrg)return null;
-      return {externalId:String(c.id||""),name:String(c.name||""),organizationId:backendOrg.id,ownerName:String(c.owner||"待分配"),kind:c.kind==="猎户"?"猎户":"新客",customerType:"政企客户",carrier:c.carrier||null,industry:c.industry||"待分类",province:c.province||backendOrg.province||null,city:c.city||backendOrg.city||null,area:c.area||backendOrg.district||null,address:c.address||null,contact:c.contact||null,phone:c.phone||null,need:c.need||"需求待识别",stage:c.stage||"线索入池",potential:c.potential||"中",score:Number(c.score)||60,nextAction:c.nextAction||"完成首次触达",isQianBaiWanGroup:customerFlag(c.isQianBaiWanGroup),isKeyAccount:customerFlag(c.isKeyAccount),source:(c.sources||[])[0]||"前端数据适配",createdAt:c.createdAt||null,reasons:c.reasons||[],tags:c.tags||[],stageHistory:c.stageHistory||[],crmFlow:c.crmFlow||[],assignmentReason:c.assignmentReason||"",assignmentConfidence:c.assignmentConfidence||""};
+      return {externalId:String(c.id||""),name:String(c.name||""),organizationId:backendOrg.id,ownerName:String(c.owner||"待分配"),kind:c.kind==="猎户"?"猎户":"新客",customerType:"政企客户",carrier:c.carrier||null,industry:c.industry||"待分类",province:c.province||backendOrg.province||null,city:c.city||backendOrg.city||null,area:c.area||backendOrg.district||null,address:c.address||null,contact:c.contact||null,phone:c.phone||null,need:c.need||"需求待识别",stage:c.stage||"线索入池",potential:c.potential||"中",score:Number(c.score)||60,nextAction:c.nextAction||"完成首次触达",isQianBaiWanGroup:customerFlag(c.isQianBaiWanGroup),isKeyAccount:customerFlag(c.isKeyAccount),source:(c.sources||[])[0]||"前端数据适配",sources:c.sources||[],lastContact:c.lastContact||null,createdAt:c.createdAt||null,reasons:c.reasons||[],tags:c.tags||[],stageHistory:c.stageHistory||[],crmFlow:c.crmFlow||[],assignmentReason:c.assignmentReason||"",assignmentConfidence:c.assignmentConfidence||""};
     }
     function backendCustomerToFrontend(item){
       var original=legacyCustomerSeed.find(function(c){return String(c.id)===String(item.externalId||item.id);})||state.customers.find(function(c){return String(c.id)===String(item.externalId||item.id);})||{},backendOrg=backendOrganizations.find(function(orgItem){return orgItem.id===item.organizationId;}),managingOrgId=backendOrg?backendOrg.frontendId:original.managingOrgId;
-      var extra=item.extraData||{},customer=Object.assign({},original,{id:String(item.externalId||item.id),backendId:item.backendId,backendVersion:item.version,backendUpdatedAt:item.updatedAt,name:item.name,managingOrgId:managingOrgId,territoryOrgId:org(managingOrgId)&&org(managingOrgId).parentId,owner:item.ownerName||"待分配",kind:item.kind,customerType:item.customerType||"政企客户",carrier:item.carrier||"",industry:item.industry||"待分类",province:item.province||"",city:item.city||"",area:item.area||"",address:item.address||"",contact:item.contact||"",phone:item.phone||"",need:item.need||"需求待识别",stage:item.stage||"线索入池",potential:item.potential||"中",score:Number(item.score)||0,nextAction:item.nextAction||"完成首次触达",isQianBaiWanGroup:customerFlag(item.isQianBaiWanGroup),isKeyAccount:customerFlag(item.isKeyAccount),createdAt:item.createdAt||original.createdAt||new Date().toISOString(),sources:[item.source||"后端数据库"],reasons:extra.reasons||original.reasons||[],tags:extra.tags||original.tags||[],stageHistory:Array.isArray(extra.stageHistory)?extra.stageHistory:original.stageHistory||[],crmFlow:Array.isArray(extra.crmFlow)?extra.crmFlow:original.crmFlow||[],assignmentReason:extra.assignmentReason||original.assignmentReason||"数据库归属",assignmentConfidence:extra.assignmentConfidence||original.assignmentConfidence||"人工核验"});
+      var extra=item.extraData||{},customer=Object.assign({},original,{id:String(item.externalId||item.id),backendId:item.backendId,backendVersion:item.version,backendUpdatedAt:item.updatedAt,name:item.name,managingOrgId:managingOrgId,territoryOrgId:org(managingOrgId)&&org(managingOrgId).parentId,owner:item.ownerName||"待分配",kind:item.kind,customerType:item.customerType||"政企客户",carrier:item.carrier||"",industry:item.industry||"待分类",province:item.province||"",city:item.city||"",area:item.area||"",address:item.address||"",contact:item.contact||"",phone:item.phone||"",need:item.need||"需求待识别",stage:item.stage||"线索入池",potential:item.potential||"中",score:Number(item.score)||0,nextAction:item.nextAction||"完成首次触达",isQianBaiWanGroup:customerFlag(item.isQianBaiWanGroup),isKeyAccount:customerFlag(item.isKeyAccount),createdAt:item.createdAt||original.createdAt||new Date().toISOString(),sources:extra.sources&&extra.sources.length?extra.sources:[item.source||"后端数据库"],lastContact:extra.lastContact||null,reasons:extra.reasons||original.reasons||[],tags:extra.tags||original.tags||[],stageHistory:Array.isArray(extra.stageHistory)?extra.stageHistory:original.stageHistory||[],crmFlow:Array.isArray(extra.crmFlow)?extra.crmFlow:original.crmFlow||[],assignmentReason:extra.assignmentReason||original.assignmentReason||"数据库归属",assignmentConfidence:extra.assignmentConfidence||original.assignmentConfidence||"人工核验"});
       initializeCrmTracking(customer);return customer;
     }
     async function fetchAllBackendCustomers(){
@@ -1797,17 +1797,37 @@
       var locallyArchived=new Set((state.deletedCustomers||[]).filter(function(row){return row.request&&!/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(row.request.id);}).map(function(row){return row.customer&&row.customer.id;}));
       state.customers=items.filter(function(item){return !locallyArchived.has(item.externalId||item.id);}).map(backendCustomerToFrontend);await synchronizeBackendApprovals();state.meta=state.meta||{};state.meta.customerDataSource="backend";state.meta.total=state.customers.length;updateNavCounts();return state.customers;
     }
+    function legacyVisitImportPayload(v){
+      if(!v||!v.id||!v.customerId||!v.time||!v.purpose)return null;
+      return {externalId:String(v.id),customerId:String(v.customerId),ownerName:String(v.owner||"待分配"),time:v.time,method:v.method||"电话沟通",purpose:v.purpose,notes:v.notes||"",source:v.source||"原页面记录迁移",overrideReason:v.overrideReason||"",status:v.status||"pending",stage:v.stage||"线索入池",createdAt:v.createdAt||null,createdBy:v.createdBy||"演示数据迁移",canceledAt:v.canceledAt||null,canceledBy:v.canceledBy||null,cancelReason:v.cancelReason||null,completedAt:v.completedAt||null,outcome:v.outcome||null,nextAction:v.nextAction||null,dealProduct:v.dealProduct||null,dealAmount:Number(v.dealAmount)||0,dealRemark:v.dealRemark||null,aiStructured:v.aiStructured||null,simulated:!!v.simulated};
+    }
+    async function fetchAllBackendRows(path){var page=1,items=[],result;do{result=await backendRequest(path+(path.indexOf("?")>=0?"&":"?")+"page="+page+"&pageSize=200");items=items.concat(result.items||[]);page++;}while(items.length<result.total);return items;}
+    async function synchronizeBackendVisits(allowBootstrap){
+      var items=await fetchAllBackendRows("/visits");
+      if(!items.length&&allowBootstrap&&currentUser&&["super_admin","group_admin"].indexOf(currentUser.roleCode)>=0&&legacyVisitSeed.length){
+        var customerIds=new Set(state.customers.map(function(c){return c.id;})),rows=legacyVisitSeed.filter(function(v){return customerIds.has(v.customerId);}).map(legacyVisitImportPayload).filter(Boolean);
+        for(var start=0;start<rows.length;start+=500)await backendRequest("/visits/import",{method:"POST",body:JSON.stringify({rows:rows.slice(start,start+500)})});
+        items=await fetchAllBackendRows("/visits");
+      }
+      state.visits=items;state.meta=state.meta||{};state.meta.visitDataSource="backend";saveState();return items;
+    }
+    async function synchronizeBackendOpportunities(){
+      var items=await fetchAllBackendRows("/opportunities"),byId=new Map(items.map(function(item){return [item.customerId,item];}));
+      state.customers.forEach(function(c){var recommendation=byId.get(c.id);if(recommendation){c.score=recommendation.score;c.reasons=recommendation.reasons||[];c.nextAction=recommendation.nextAction||c.nextAction;c.productDirections=recommendation.productDirections||[];}});
+      return items;
+    }
+    async function synchronizeBackendBusiness(allowBootstrap){await synchronizeBackendVisits(allowBootstrap);await synchronizeBackendOpportunities();}
     async function refreshBackendCustomerDetail(id){
       var item=await backendRequest("/customers/"+encodeURIComponent(id)),customerItem=backendCustomerToFrontend(item),index=state.customers.findIndex(function(c){return c.id===customerItem.id;});
       if(index>=0)state.customers[index]=customerItem;else state.customers.push(customerItem);return customerItem;
     }
     async function loginWithBackend(account,password){
-      var data=await backendRequest("/auth/login",{method:"POST",body:JSON.stringify({username:String(account||"").trim(),password:String(password||"")})},false);sessionStorage.setItem(ACCESS_TOKEN_KEY,data.accessToken);await loadBackendOrganizationTree();var user=backendToFrontendUser(data.user);storeBackendUser(user);await synchronizeBackendCustomers(true);return user;
+      var data=await backendRequest("/auth/login",{method:"POST",body:JSON.stringify({username:String(account||"").trim(),password:String(password||"")})},false);sessionStorage.setItem(ACCESS_TOKEN_KEY,data.accessToken);await loadBackendOrganizationTree();var user=backendToFrontendUser(data.user);storeBackendUser(user);await synchronizeBackendCustomers(true);await synchronizeBackendBusiness(true);return user;
     }
     async function restoreBackendSession(){
       try{
         if(!sessionStorage.getItem(ACCESS_TOKEN_KEY)&&!await refreshBackendAccessToken())return;
-        await loadBackendOrganizationTree();var apiUser=await backendRequest("/auth/me"),user=backendToFrontendUser(apiUser);storeBackendUser(user);await synchronizeBackendCustomers(true);ui.scopeOrgId=user.orgId;$("#loginLayer").classList.remove("show");updateIdentity();render();animatePage();
+        await loadBackendOrganizationTree();var apiUser=await backendRequest("/auth/me"),user=backendToFrontendUser(apiUser);storeBackendUser(user);await synchronizeBackendCustomers(true);await synchronizeBackendBusiness(true);ui.scopeOrgId=user.orgId;$("#loginLayer").classList.remove("show");updateIdentity();render();animatePage();
       }catch(error){sessionStorage.removeItem(ACCESS_TOKEN_KEY);sessionStorage.removeItem(SESSION_USER_KEY);sessionStorage.removeItem(SESSION_KEY);currentUser=null;$("#loginLayer").classList.add("show");}
     }
     function loadDeepseekConfig(){
@@ -1975,27 +1995,30 @@
     function recommendedVisitTime(){var time=new Date();time.setDate(time.getDate()+1);time.setHours(10,0,0,0);return time.toISOString();}
     function localDateTimeInput(value){var date=new Date(value),local=new Date(date.getTime()-date.getTimezoneOffset()*60000);return local.toISOString().slice(0,16);}
     function visitTimeValidation(value){var time=new Date(value),now=Date.now();if(isNaN(time.getTime()))return {ok:false,message:"请选择有效的拜访时间。"};if(time.getTime()<now-60000)return {ok:false,message:"拜访时间不能早于当前时间。"};return {ok:true,time:time.toISOString()};}
-    function createVisitTask(data,source){
+    async function createVisitTask(data,source){
       var customerHit=customer(data.customerId);if(!customerHit||!canEdit()){toast("无权为该客户创建任务。","error");return {ok:false};}
       var timeResult=visitTimeValidation(data.time),purpose=String(data.purpose||"").trim();if(!timeResult.ok){toast(timeResult.message,"error");return {ok:false,message:timeResult.message};}if(purpose.length<2){toast("请填写清晰的拜访任务目标。","error");return {ok:false,message:"任务目标过短"};}
       if(scopedManagerChoices(customerHit.managingOrgId).indexOf(data.owner)<0){toast("所选负责人不在当前可分配范围。","error");return {ok:false,message:"负责人越权"};}
       var conflict=pendingVisitFor(data.customerId),overrideReason="";
-      if(conflict){overrideReason=String(window.prompt("该客户已有未完成拜访任务（"+conflict.owner+"，"+fmtDateTime(conflict.time)+"）。如确需重复创建，请填写授权原因；取消或留空将停止创建。","")||"").trim();if(!overrideReason){toast("已拦截重复拜访任务，未创建新任务。","error");return {ok:false,conflict:true};}}
-      var visit={id:uid("v"),customerId:data.customerId,owner:data.owner,time:timeResult.time,method:data.method,purpose:purpose,status:"pending",notes:String(data.notes||"").trim(),stage:customerHit.stage,dealProduct:"",dealAmount:0,dealRemark:"",createdAt:new Date().toISOString(),createdBy:currentUser.name,source:source||"手工创建",overrideReason:overrideReason,conflictTaskId:conflict?conflict.id:""};
-      state.visits.push(visit);customerHit.nextAction=data.purpose;state.history.push({id:uid("h"),customerId:customerHit.id,time:visit.createdAt,title:conflict?"授权创建重复拜访任务":"创建拜访任务",detail:data.owner+"计划进行"+data.method+"。来源："+visit.source+"。"+(overrideReason?"授权原因："+overrideReason:"")});saveState();return {ok:true,visit:visit,customer:customerHit,conflict:!!conflict};
+      if(conflict){overrideReason=String(window.prompt("该客户已有未完成拜访任务（"+conflict.owner+"，"+fmtDateTime(conflict.time)+"）。如确需重复创建，请填写至少 5 字授权原因；取消或留空将停止创建。","")||"").trim();if(overrideReason.length<5){toast("已拦截重复拜访任务，未创建新任务。","error");return {ok:false,conflict:true};}}
+      try{
+        var visit=await backendRequest("/visits",{method:"POST",body:JSON.stringify({customerId:data.customerId,ownerName:data.owner,time:timeResult.time,method:data.method,purpose:purpose,notes:String(data.notes||"").trim(),source:source||"手工创建",overrideReason:overrideReason})});
+        await synchronizeBackendCustomers(false);await synchronizeBackendVisits(false);await synchronizeBackendOpportunities();
+        state.history.push({id:uid("h"),customerId:data.customerId,time:visit.createdAt,title:conflict?"授权创建重复拜访任务":"创建拜访任务",detail:data.owner+"计划进行"+data.method+"。来源："+visit.source+"。"+(overrideReason?"授权原因："+overrideReason:"")});saveState();return {ok:true,visit:visit,customer:customer(data.customerId),conflict:!!conflict};
+      }catch(error){toast(error.message||"拜访任务创建失败。","error");return {ok:false,message:error.message};}
     }
-    function quickCreateVisit(id){
+    async function quickCreateVisit(id){
       var c=customer(id);if(!c)return toast("无权为该客户创建任务。","error");
-      var result=createVisitTask({customerId:c.id,owner:c.owner,time:recommendedVisitTime(),method:c.stage==="线索入池"?"电话沟通":"上门拜访",purpose:c.nextAction||"确认客户需求、决策链与下一步计划",notes:"由推荐商机一键生成，请提前核验联系人与拜访材料。"},"推荐商机一键生成");
+      var result=await createVisitTask({customerId:c.id,owner:c.owner,time:recommendedVisitTime(),method:c.stage==="线索入池"?"电话沟通":"上门拜访",purpose:c.nextAction||"确认客户需求、决策链与下一步计划",notes:"由推荐商机一键生成，请提前核验联系人与拜访材料。"},"推荐商机一键生成");
       if(!result.ok)return;render();toast(result.conflict?"已记录授权原因并生成拜访任务。":"已一键生成明日 10:00 的拜访任务。");
     }
-    function cancelVisitTask(id,reason){
+    async function cancelVisitTask(id,reason){
       var visit=state.visits.find(function(item){return item.id===id;}),related=visit?customer(visit.customerId):null,cleanReason=String(reason||"").trim();
       if(!visit||!related||!canEdit()||!isOpenVisit(visit))return {ok:false,message:"该任务已结束或不在当前授权范围。"};
       if(cleanReason.length<5)return {ok:false,message:"取消原因至少需要填写 5 个字。"};
-      visit.status="canceled";visit.canceledAt=new Date().toISOString();visit.canceledBy=currentUser.name;visit.cancelReason=cleanReason;state.history.push({id:uid("h"),customerId:related.id,time:visit.canceledAt,title:"拜访任务已取消",detail:currentUser.name+"取消拜访任务，原因："+cleanReason+"。原计划时间："+fmtDateTime(visit.time)+"。"});saveState();return {ok:true,visit:visit,customer:related};
+      try{var saved=await backendRequest("/visits/"+encodeURIComponent(id)+"/cancel",{method:"POST",body:JSON.stringify({version:visit.version,reason:cleanReason})});await synchronizeBackendVisits(false);state.history.push({id:uid("h"),customerId:related.id,time:saved.canceledAt,title:"拜访任务已取消",detail:currentUser.name+"取消拜访任务，原因："+cleanReason+"。原计划时间："+fmtDateTime(visit.time)+"。"});saveState();return {ok:true,visit:saved,customer:related};}catch(error){return {ok:false,message:error.message||"取消任务失败"};}
     }
-    function completeVisitTask(data){
+    async function completeVisitTask(data){
       var x=Object.assign({},data),visit=state.visits.find(function(item){return item.id===x.id;}),related=visit?customer(visit.customerId):null;
       if(!visit||!related||!canEdit()||!isOpenVisit(visit))return {ok:false,message:"该任务已结束或无权完成。"};
       x.outcome=String(x.outcome||"").trim();x.stage=String(x.stage||"").trim();x.notes=String(x.notes||"").trim();x.nextAction=String(x.nextAction||"").trim();
@@ -2007,14 +2030,13 @@
       if(isDeal&&!String(x.dealProduct||"").trim())return {ok:false,message:"请填写成交产品。"};
       if(isDeal&&(!Number.isFinite(dealAmount)||!(dealAmount>0)))return {ok:false,message:"请填写大于 0 的有效成交金额。"};
       if(isDeal){x.outcome="已达成合作";x.stage="已成交";}
-      visit.status="completed";visit.completedAt=new Date().toISOString();visit.outcome=x.outcome;visit.stage=x.stage;visit.notes=x.notes;visit.nextAction=x.nextAction;visit.dealProduct=isDeal?String(x.dealProduct).trim():"";visit.dealAmount=isDeal?dealAmount:0;visit.dealRemark=isDeal?String(x.dealRemark||"").trim():"";
-      if(aiHit){visit.aiStructured={need:aiHit.need,carrier:aiHit.carrier,budget:aiHit.budget,purchaseTime:aiHit.purchaseTime,keyContact:aiHit.keyContact,role:aiHit.role,decisionMaker:aiHit.decisionMaker,suggestedStage:aiHit.suggestedStage,nextAction:aiHit.nextAction,confirmedBy:currentUser.name,confirmedAt:visit.completedAt};related.need=aiHit.need;}
-      if(isDeal)related.potential="高";else if(x.outcome==="形成明确商机"&&related.potential==="低")related.potential="中";
-      var transitionNote=isDeal?"完成"+visit.dealProduct+"成交，成交金额 "+formatCurrency(visit.dealAmount)+"。":x.outcome+"；"+(x.nextAction||"待制定下一步"),transitioned=recordStageTransition(related,x.stage,"拜访结果回填",transitionNote,visit.owner);
-      if(isDeal&&!transitioned){initializeCrmTracking(related);related.stageHistory.push({id:uid("stage"),time:visit.completedAt,fromStage:"已成交",toStage:"已成交",direction:"成交沉淀",operator:currentUser.name,owner:visit.owner,source:"拜访结果回填",note:transitionNote});}
-      related.lastContact=visit.completedAt;related.nextAction=x.nextAction||"待制定下一步";related.score=scoreCustomer(related);related.reasons=recommendationReasons(related);
-      var historyDetail=isDeal?transitionNote+(visit.dealRemark?" "+visit.dealRemark:""):x.outcome+"。"+x.notes+(aiHit?" AI整理（用户已确认）：需求 "+aiHit.need+"；预算 "+aiHit.budget+"；采购时间 "+aiHit.purchaseTime+"；决策人 "+aiHit.decisionMaker+"。":"");
-      state.history.push({id:uid("h"),customerId:related.id,time:visit.completedAt,title:isDeal?"成交结果已回填":aiHit?"拜访结果与 AI 纪要已确认":"拜访结果已回填",detail:historyDetail});pendingAiExtraction=null;saveState();return {ok:true,isDeal:isDeal,aiHit:aiHit,visit:visit,customer:related};
+      var structured=aiHit?{need:aiHit.need,carrier:aiHit.carrier,budget:aiHit.budget,purchaseTime:aiHit.purchaseTime,keyContact:aiHit.keyContact,role:aiHit.role,decisionMaker:aiHit.decisionMaker,suggestedStage:aiHit.suggestedStage,nextAction:aiHit.nextAction,confirmedBy:currentUser.name,confirmedAt:new Date().toISOString()}:null;
+      try{
+        var saved=await backendRequest("/visits/"+encodeURIComponent(visit.id)+"/complete",{method:"POST",body:JSON.stringify({version:visit.version,outcome:x.outcome,stage:x.stage,notes:x.notes,nextAction:x.nextAction,dealProduct:isDeal?String(x.dealProduct).trim():"",dealAmount:isDeal?dealAmount:0,dealRemark:isDeal?String(x.dealRemark||"").trim():"",aiStructured:structured})});
+        await synchronizeBackendCustomers(false);await synchronizeBackendVisits(false);await synchronizeBackendOpportunities();
+        var resultVisit=saved.visit,historyDetail=isDeal?"完成"+resultVisit.dealProduct+"成交，成交金额 "+formatCurrency(resultVisit.dealAmount)+"。":x.outcome+"。"+x.notes;
+        state.history.push({id:uid("h"),customerId:related.id,time:resultVisit.completedAt,title:isDeal?"成交结果已回填":aiHit?"拜访结果与 AI 纪要已确认":"拜访结果已回填",detail:historyDetail});pendingAiExtraction=null;saveState();return {ok:true,isDeal:isDeal,aiHit:aiHit,visit:resultVisit,customer:customer(related.id)};
+      }catch(error){return {ok:false,message:error.message||"拜访反馈保存失败"};}
     }
     function canEdit(){
       return canManageCustomerWork(currentUser)&&currentUser.roleCode!=="viewer";
@@ -2549,25 +2571,20 @@
       var history=ui.supportMessages.filter(function(item){return !item.pending&&!item.report;}).slice(-8).map(function(item){return {role:item.role,content:String(item.text||"")};});
       requestDeepseek(deepseekConfig.apiKey,deepseekConfig.model,[{role:"system",content:deepseekBusinessContext(text)}].concat(history)).then(function(payload){pending.text=String(payload.content||"本次没有返回有效内容。");delete pending.pending;deepseekConfig.connectedAt=new Date().toISOString();deepseekConfig.lastError="";saveDeepseekConfig();}).catch(function(error){var fallback=aiSupportAnswer(text);pending.text=aiProviderName(deepseekConfig.provider)+" 暂时无法完成问答（"+(error.message||"连接失败")+"）。以下为本地事实引擎结果：\n\n"+fallback.text;pending.route=fallback.route;pending.label=fallback.label;pending.report=fallback.report||null;delete pending.pending;deepseekConfig.connectedAt="";deepseekConfig.lastError=error.message||"连接失败";saveDeepseekConfig();}).finally(function(){ui.supportPending=false;render();var doneChat=$("#supportChat");if(doneChat)doneChat.scrollTop=doneChat.scrollHeight;});
     }
-    function refreshOpportunityPortfolio(){
-      var list=scopedCustomers(),updatedAt=new Date().toISOString(),changed=0;
-      var stageActions={"线索入池":"完成首次触达并核验需求","已联系":"确认决策人、预算与采购时间","已拜访":"整理纪要并输出初步方案","方案沟通":"确认方案边界与商务条件","商机立项":"推进报价、审批与合同流程","已成交":"安排交付并维护客户关系"};
-      list.forEach(function(c){
-        var oldScore=c.score,oldReasons=(c.reasons||[]).join("|"),oldAction=c.nextAction;
-        var pending=pendingVisitFor(c.id);if(pending)c.nextAction=pending.purpose;else if(!c.nextAction||c.nextAction==="待制定下一步")c.nextAction=stageActions[c.stage]||"确认下一步经营动作";
-        c.score=scoreCustomer(c);c.reasons=recommendationReasons(c);c.opportunityUpdatedAt=updatedAt;c.opportunityUpdatedBy=currentUser.name;
-        if(oldScore!==c.score||oldReasons!==c.reasons.join("|")||oldAction!==c.nextAction)changed++;
-      });
-      var ranked=list.filter(function(c){return c.stage!=="已成交";}).sort(function(a,b){return b.score-a.score;}),high=ranked.filter(function(c){return c.score>=80;}),stale=ranked.filter(function(c){return daysAgo(c.lastContact)>7;});
-      state.meta.lastAiOpportunityUpdate={time:updatedAt,by:currentUser.name,scopeOrgId:activeScope().id,total:list.length,changed:changed};saveState();
-      return {updatedAt:updatedAt,scopeName:activeScope().name,total:list.length,changed:changed,high:high.length,stale:stale.length,top:ranked.slice(0,5)};
+    async function refreshOpportunityPortfolio(){
+      var scope=activeScope(),backendOrg=backendOrganizations.find(function(item){return item.frontendId===scope.id;}),query=backendOrg?"?organizationId="+encodeURIComponent(backendOrg.id):"";
+      var report=await backendRequest("/opportunities/refresh"+query,{method:"POST"});
+      await synchronizeBackendCustomers(false);await synchronizeBackendOpportunities();
+      state.meta.lastAiOpportunityUpdate={time:report.updatedAt,by:currentUser.name,scopeOrgId:scope.id,total:report.total,changed:report.changed};saveState();
+      return {updatedAt:report.updatedAt,scopeName:scope.name,total:report.total,changed:report.changed,high:report.high,stale:report.stale,top:(report.top||[]).map(function(item){return customer(item.customerId);}).filter(Boolean)};
     }
     function aiUpdateOpportunitiesModal(){
       if(!canEdit())return toast("当前身份无权更新商机。","error");
-      runAiModal("AI更新商机","正在刷新当前组织范围商机…",["读取客户档案与最新阶段","检查未完成拜访任务","重新计算商机评分与推荐原因","生成高优先级商机摘要"],function(){
-        var result=refreshOpportunityPortfolio();render();
+      runAiModal("AI更新商机","正在刷新当前组织范围商机…",["读取客户档案与最新阶段","检查未完成拜访任务","重新计算商机评分与推荐原因","生成高优先级商机摘要"],async function(){
+        try{var result=await refreshOpportunityPortfolio();render();
         var rows=result.top.map(function(c,index){return '<div class="list-row"><div class="rank">'+String(index+1).padStart(2,"0")+'</div><div><div class="list-title">'+esc(c.name)+'</div><div class="list-meta">'+esc(c.kind+" · "+c.area+" · "+c.nextAction)+'</div></div><div class="score"><strong>'+c.score+'</strong><span>更新后评分</span></div></div>';}).join("");
         openModal("AI商机更新完成",'<div class="detail-hero"><div class="detail-title"><div><h3>'+esc(result.scopeName)+'商机已刷新</h3><div>'+badge("更新 "+result.total+" 条","blue")+" "+badge("高优先级 "+result.high+" 条","orange")+" "+badge("超 7 天未跟进 "+result.stale+" 条","red")+'</div></div><div class="source-icon">AI</div></div><p class="subtitle">'+fmtDateTime(result.updatedAt)+" · 由 "+esc(currentUser.name)+'发起。本次根据现有档案、阶段、任务和跟进时效更新，不自动改变客户归属、负责人或经营阶段。</p></div><div class="detail-grid"><div class="kv"><label>扫描商机</label><span>'+result.total+' 条</span></div><div class="kv"><label>内容发生变化</label><span>'+result.changed+' 条</span></div><div class="kv"><label>高优先级待跟进</label><span>'+result.high+' 条</span></div></div><h3 style="margin:18px 0 9px;font-size:14px">更新后优先商机 Top 5</h3><div class="card">'+(rows||'<div class="empty"><strong>暂无待跟进商机</strong>当前范围没有可更新的数据。</div>')+'</div><div class="data-note" style="margin-top:13px">AI更新只重算评分、推荐原因和下一步提示；所有结果仍可追溯并由经营人员复核。</div>',true,'<button class="btn" data-action="close-modal">关闭</button><button class="btn btn-refresh" data-action="view-ai-priorities">查看更新后的推荐商机</button>');
+        }catch(error){closeModal();toast(error.message||"商机更新失败，请稍后重试。","error");}
       });
     }
     function dailyActionModal(){
@@ -2892,21 +2909,21 @@
       else if(name==="support-route"){var supportRoute=action.dataset.targetRoute;go(supportRoute);}
       else if(name==="new-customer")newCustomerModal();
       else if(name==="customer-detail"){try{await refreshBackendCustomerDetail(id);customerDetailModal(id);}catch(error){toast(error.message||"客户详情加载失败。","error");}}
-      else if(name==="refresh-customers"){try{await synchronizeBackendCustomers(false);render();toast("已从共享数据库刷新当前授权范围的客户与审批。");}catch(error){toast(error.message||"共享客户刷新失败。","error");}}
+      else if(name==="refresh-customers"){try{await synchronizeBackendCustomers(false);await synchronizeBackendBusiness(false);render();toast("已从共享数据库刷新客户、商机与拜访任务。");}catch(error){toast(error.message||"共享数据刷新失败。","error");}}
       else if(name==="request-customer-delete")customerDeleteRequestModal(id);
       else if(name==="customer-change-approvals"||name==="customer-approvals")await openSharedApprovals();
       else if(name==="approve-customer-change"||name==="reject-customer-change"){
         var acceptChange=name==="approve-customer-change",changeComment=acceptChange?"审核通过":prompt("请填写驳回原因（必填）");
         if(changeComment===null)return;
         if(acceptChange&&!confirm("确认通过该客户的归属地 / 客户经理变更？"))return;
-        if(isBackendApprovalId(id)){try{await backendRequest("/customers/requests/"+encodeURIComponent(id)+"/decision",{method:"POST",body:JSON.stringify({approve:acceptChange,comment:changeComment})});await synchronizeBackendCustomers(false);render();customerApprovalModal();toast(acceptChange?"审批通过，客户归属已更新。":"申请已驳回，原归属保持不变。");}catch(error){toast(error.message||"客户变更审批失败。","error");}return;}
+        if(isBackendApprovalId(id)){try{await backendRequest("/customers/requests/"+encodeURIComponent(id)+"/decision",{method:"POST",body:JSON.stringify({approve:acceptChange,comment:changeComment})});await synchronizeBackendCustomers(false);await synchronizeBackendBusiness(false);render();customerApprovalModal();toast(acceptChange?"审批通过，客户归属和未完成拜访任务已同步更新。":"申请已驳回，原归属保持不变。");}catch(error){toast(error.message||"客户变更审批失败。","error");}return;}
         var changeResult=reviewCustomerChange(id,acceptChange,changeComment);if(!changeResult.ok)return toast(changeResult.message,"error");render();customerChangeModal();toast(acceptChange?"审批通过，客户归属已更新。":"申请已驳回，原归属保持不变。");
       }
       else if(name==="customer-delete-approvals")await openSharedApprovals();
       else if(name==="approve-customer-delete"){
         var approvalRequest=(state.customerDeleteRequests||[]).find(function(request){return request.id===id;});
         if(!approvalRequest)return toast("未找到删除申请。","error");
-        if(confirm("确定审批通过并从业务列表删除客户"+approvalRequest.customerName+"吗？关联拜访和互动记录将进入审计归档。")){if(isBackendApprovalId(id)){try{await backendRequest("/customers/requests/"+encodeURIComponent(id)+"/decision",{method:"POST",body:JSON.stringify({approve:true,comment:"直属上级审批通过"})});await synchronizeBackendCustomers(false);render();customerApprovalModal();toast("审批已通过，客户已移出共享业务列表，数据库保留审计记录。");}catch(error){toast(error.message||"客户删除审批失败。","error");}return;}var approvalResult=approveCustomerDeleteRequest(id,"直属上级审批通过");if(!approvalResult.ok)return toast(approvalResult.message,"error");render();customerDeleteApprovalModal();toast("审批已通过，客户已移出业务列表并进入审计归档。");}
+        if(confirm("确定审批通过并从业务列表删除客户"+approvalRequest.customerName+"吗？关联拜访和互动记录将进入审计归档。")){if(isBackendApprovalId(id)){try{await backendRequest("/customers/requests/"+encodeURIComponent(id)+"/decision",{method:"POST",body:JSON.stringify({approve:true,comment:"直属上级审批通过"})});await synchronizeBackendCustomers(false);await synchronizeBackendBusiness(false);render();customerApprovalModal();toast("审批已通过，客户已移出共享业务列表，数据库保留审计记录。");}catch(error){toast(error.message||"客户删除审批失败。","error");}return;}var approvalResult=approveCustomerDeleteRequest(id,"直属上级审批通过");if(!approvalResult.ok)return toast(approvalResult.message,"error");render();customerDeleteApprovalModal();toast("审批已通过，客户已移出业务列表并进入审计归档。");}
       }
       else if(name==="reject-customer-delete"){
         var rejectComment=String(window.prompt("请填写驳回原因；客户将继续保留在 CRM 中。","")||"").trim();if(!rejectComment)return;
@@ -2921,7 +2938,7 @@
       else if(name==="ai-opportunity")aiOpportunityModal(id);
       else if(name==="brief")briefModal(id);
       else if(name==="new-task"){closeModal();newTaskModal(id||"");}
-      else if(name==="quick-task")quickCreateVisit(id);
+      else if(name==="quick-task")await quickCreateVisit(id);
       else if(name==="view-visits"){ui.visitCustomerId=id;ui.visitTab="all";ui.route="visits";render();window.scrollTo({top:0,behavior:"smooth"});}
       else if(name==="clear-visit-filter"){ui.visitCustomerId="";render();}
       else if(name==="crm-stage-filter"){ui.customerStage=action.dataset.stage||"all";ui.customerPage=1;go("customers");}
@@ -2941,7 +2958,7 @@
       else if(name==="download-template"){download("智拓政企客户导入模板.csv","企业名称,线索类型,行业,联系人,电话,需求\r\n深圳示例数字科技有限公司,新客,软件与信息服务,张经理,13*********,企业专线\r\n深圳示例智能制造有限公司,猎户,先进制造,李经理,13*********,5G专网","text/csv;charset=utf-8");toast("政企客户导入模板已下载。");}
       else if(name==="import-data")importModal();
       else if(name==="export-json"){var data={customers:scopedCustomers(),visits:scopedVisits(),scope:orgPathText(activeScope().id),exportedAt:new Date().toISOString()};download("智拓当前范围备份.json",JSON.stringify(data,null,2),"application/json");toast("当前范围备份已导出。");}
-      else if(name==="reset-data"){if(!isUserAdministrator(currentUser))return toast("仅集团经营管理员可以重置本地演示记录。","error");if(confirm("仅重置当前浏览器的演示记录（如拜访和文档），不会删除或覆盖共享数据库中的客户。确定继续吗？")){state=buildSeedData();await synchronizeBackendCustomers(false);saveState();render();toast("本地演示记录已重置，客户已从共享数据库重新读取。");}}
+      else if(name==="reset-data"){if(!isUserAdministrator(currentUser))return toast("仅集团经营管理员可以重置本地演示记录。","error");if(confirm("仅重置当前浏览器的演示记录，不会删除或覆盖共享数据库中的客户和拜访任务。确定继续吗？")){state=buildSeedData();await synchronizeBackendCustomers(false);await synchronizeBackendBusiness(false);saveState();render();toast("本地演示记录已重置，业务数据已从共享数据库重新读取。");}}
       else if(name==="page"){ui.customerPage=Math.max(1,Number(action.dataset.page)||1);render();}
       else if(name==="copy-brief"){var c=customer(id);if(c){var b=aiService.generateVisitBrief(c);copyText("AI 拜访简报｜"+c.name+"\n\n本次拜访目标\n"+b.target+"\n\n客户基本情况\n- "+b.basics.join("\n- ")+"\n\n建议重点了解\n- "+b.focus.join("\n- ")+"\n\n推荐沟通问题\n- "+b.questions.join("\n- ")+"\n\n风险提醒\n- "+b.risks.join("\n- ")+"\n\n下一步目标\n"+b.nextGoal);toast("AI 拜访简报已复制。");}}
     });
@@ -3025,20 +3042,20 @@
         state.history.push({id:uid("h"),customerId:editCustomer.id,time:new Date().toISOString(),title:ownershipChanged?"客户资料已保存，归属变更待审批":flowChanged?"CRM 客户流转已更新":"客户资料已编辑",detail:ownershipChanged?currentUser.name+"保存基础资料；归属地和客户经理待上级审批，暂未生效。":flowChanged?currentUser.name+"完成客户流转："+flowReason:currentUser.name+"更新了客户基础资料。"});saveState();closeModal();render();toast(ownershipChanged?"归属变更已提交上级审批，原归属与客户经理暂不变；其他资料已保存。":flowChanged?"CRM 流转已保存，部门、负责人和阶段变化均已留痕。":"客户资料已保存，评分同步更新为 "+editCustomer.score+" 分。");return;
       }
       if(e.target.id==="taskForm"){
-        var t=Object.fromEntries(new FormData(e.target)),taskResult=createVisitTask({customerId:t.customerId,owner:t.owner,time:t.time,method:t.method,purpose:t.purpose,notes:t.notes},"手工创建");if(!taskResult.ok)return;closeModal();ui.visitCustomerId=t.customerId;ui.route="visits";render();toast(taskResult.conflict?"已记录授权原因并创建任务。":"拜访任务已创建。");return;
+        var t=Object.fromEntries(new FormData(e.target)),taskResult=await createVisitTask({customerId:t.customerId,owner:t.owner,time:t.time,method:t.method,purpose:t.purpose,notes:t.notes},"手工创建");if(!taskResult.ok)return;closeModal();ui.visitCustomerId=t.customerId;ui.route="visits";render();toast(taskResult.conflict?"已记录授权原因并创建任务。":"拜访任务已创建。");return;
       }
       if(e.target.getAttribute("id")==="taskEditForm"){
         var taskData=Object.fromEntries(new FormData(e.target)),task=state.visits.find(function(item){return item.id===taskData.id;}),taskCustomer=task?customer(task.customerId):null;
         if(!task||!taskCustomer||!canEdit()||!isOpenVisit(task))return toast("无权编辑已结束或范围外的任务。","error");
         var editTime=visitTimeValidation(taskData.time),cleanPurpose=String(taskData.purpose||"").trim();if(!editTime.ok)return toast(editTime.message,"error");if(cleanPurpose.length<2)return toast("请填写清晰的拜访任务目标。","error");
         if(scopedManagerChoices(taskCustomer.managingOrgId).indexOf(taskData.owner)<0)return toast("所选负责人不在当前可分配范围。","error");
-        var oldOwner=task.owner;task.time=editTime.time;task.method=taskData.method;task.owner=taskData.owner;task.purpose=cleanPurpose;task.notes=String(taskData.notes||"").trim();task.updatedAt=new Date().toISOString();task.updatedBy=currentUser.name;taskCustomer.nextAction=task.purpose;state.history.push({id:uid("h"),customerId:taskCustomer.id,time:task.updatedAt,title:"拜访任务已调整",detail:currentUser.name+"将任务从 "+oldOwner+" 调整给 "+task.owner+"，执行时间为 "+fmtDateTime(task.time)+"。"});saveState();closeModal();render();toast("任务已更新并完成改派留痕。");return;
+        try{var oldOwner=task.owner,savedTask=await backendRequest("/visits/"+encodeURIComponent(task.id),{method:"PATCH",body:JSON.stringify({version:task.version,time:editTime.time,method:taskData.method,ownerName:taskData.owner,purpose:cleanPurpose,notes:String(taskData.notes||"").trim()})});await synchronizeBackendCustomers(false);await synchronizeBackendVisits(false);state.history.push({id:uid("h"),customerId:taskCustomer.id,time:savedTask.updatedAt,title:"拜访任务已调整",detail:currentUser.name+"将任务从 "+oldOwner+" 调整给 "+savedTask.owner+"，执行时间为 "+fmtDateTime(savedTask.time)+"。"});saveState();closeModal();render();toast("任务已更新并完成改派留痕。");}catch(error){toast(error.message||"任务调整失败。","error");}return;
       }
       if(e.target.getAttribute("id")==="cancelTaskForm"){
-        var cancelData=Object.fromEntries(new FormData(e.target)),cancelResult=cancelVisitTask(cancelData.id,cancelData.reason);if(!cancelResult.ok)return toast(cancelResult.message,"error");closeModal();render();toast("拜访任务已取消并保留操作记录。");return;
+        var cancelData=Object.fromEntries(new FormData(e.target)),cancelResult=await cancelVisitTask(cancelData.id,cancelData.reason);if(!cancelResult.ok)return toast(cancelResult.message,"error");closeModal();render();toast("拜访任务已取消并保留操作记录。");return;
       }
       if(e.target.getAttribute("id")==="completeForm"){
-        var completeResult=completeVisitTask(Object.fromEntries(new FormData(e.target)));if(!completeResult.ok)return toast(completeResult.message,"error");closeModal();ui.route=completeResult.isDeal?"weekly":ui.route;render();toast(completeResult.isDeal?"成交已记录："+completeResult.visit.dealProduct+" · "+formatCurrency(completeResult.visit.dealAmount)+"。周经分已同步更新。":completeResult.aiHit?"拜访结果已保存，AI 整理内容已按确认写入客户档案。":"拜访结果已保存。");
+        var completeResult=await completeVisitTask(Object.fromEntries(new FormData(e.target)));if(!completeResult.ok)return toast(completeResult.message,"error");closeModal();ui.route=completeResult.isDeal?"weekly":ui.route;render();toast(completeResult.isDeal?"成交已记录："+completeResult.visit.dealProduct+" · "+formatCurrency(completeResult.visit.dealAmount)+"。周经分已同步更新。":completeResult.aiHit?"拜访结果已保存，AI 整理内容已按确认写入客户档案。":"拜访结果已保存。");
       }
     });
     document.addEventListener("keydown",function(e){var layer=$("#modalLayer");if(e.key==="Escape"&&layer.classList.contains("show")){closeModal();return;}if(e.key==="Tab"&&layer.classList.contains("show")){var focusable=$$(".modal button:not([disabled]),.modal input:not([disabled]),.modal select:not([disabled]),.modal textarea:not([disabled]),.modal [tabindex]:not([tabindex=\"-1\"])").filter(function(item){return item.offsetParent!==null;}),first=focusable[0],last=focusable[focusable.length-1];if(!first)return;if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});

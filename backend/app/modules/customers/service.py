@@ -298,6 +298,8 @@ def import_customers(
                 extra_data={
                     "reasons": row.reasons,
                     "tags": row.tags,
+                    "sources": row.sources,
+                    "lastContact": row.lastContact.isoformat() if row.lastContact else None,
                     "stageHistory": row.stageHistory,
                     "crmFlow": row.crmFlow,
                     "assignmentReason": row.assignmentReason,

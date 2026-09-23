@@ -14,6 +14,7 @@ from app.modules.customers.service import (
 )
 from app.modules.organizations.models import Organization
 from app.modules.users.models import User
+from app.modules.visits.models import Visit
 
 
 def _customer_for_request(session: Session, identity: IdentityContext, ref: str) -> Customer:
@@ -218,6 +219,18 @@ def decide_request(
             customer.organization_id = target.id
             customer.owner_user_id = owner.id if owner else None
             customer.owner_name = owner_name
+            pending_visits = session.scalars(
+                select(Visit).where(Visit.customer_id == customer.id, Visit.status == "pending")
+            ).all()
+            for task in pending_visits:
+                task.owner_user_id = owner.id if owner else None
+                task.owner_name = owner_name
+                task.updated_by = identity.user.display_name
+                task.version += 1
+                task.extra_data = {
+                    **(task.extra_data or {}),
+                    "ownerAdjustmentReason": "客户归属审批通过，同步调整未完成拜访任务",
+                }
             customer.province = target.province
             customer.city = target.city
             customer.district = target.district

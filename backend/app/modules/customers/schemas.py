@@ -31,6 +31,8 @@ class CustomerImportRow(BaseModel):
     createdAt: datetime | None = None
     reasons: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    lastContact: datetime | None = None
     stageHistory: list[dict] = Field(default_factory=list)
     crmFlow: list[dict] = Field(default_factory=list)
     assignmentReason: str | None = Field(None, max_length=500)
