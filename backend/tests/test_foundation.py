@@ -39,5 +39,8 @@ def test_demo_users_cover_operating_levels_and_customer_managers() -> None:
     assert len(DEMO_USERS) == len(usernames) == len(employee_numbers)
     assert "cmcc-gd" in organization_codes
     assert {"cmcc-gd-sz", "cmcc-gd-gz", "cmcc-gd-dg"} <= organization_codes
-    assert any(item.role_code == "org_admin" and "-ft" in item.organization_code for item in DEMO_USERS)
+    assert any(
+        item.role_code == "org_admin" and "-ft" in item.organization_code
+        for item in DEMO_USERS
+    )
     assert sum(item.role_code == "customer_manager" for item in DEMO_USERS) >= 3

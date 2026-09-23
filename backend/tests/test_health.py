@@ -37,3 +37,10 @@ def test_openapi_registers_unified_map_routes() -> None:
     paths = app.openapi()["paths"]
     assert "/api/v1/maps/status" in paths
     assert "/api/v1/maps/visit-route" in paths
+
+
+def test_openapi_registers_customer_read_chain() -> None:
+    paths = app.openapi()["paths"]
+    assert "/api/v1/customers" in paths
+    assert "/api/v1/customers/import" in paths
+    assert "/api/v1/customers/{customer_ref}" in paths

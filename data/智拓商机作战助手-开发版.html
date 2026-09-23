@@ -1703,7 +1703,7 @@
       }catch(e){}
       return buildSeedData();
     }
-    var state=loadState();
+    var state=loadState(),legacyCustomerSeed=(state.customers||[]).slice();
     function saveState(){state.meta=state.meta||{};state.meta.total=state.customers.length;localStorage.setItem(STORAGE_KEY,JSON.stringify(state));updateNavCounts();}
     var backendOrganizations=[],backendRoles=[],managedApiUsers=[];
     function backendRoleLabel(code,unit){
@@ -1764,13 +1764,50 @@
       }catch(e){return null;}
     }
     async function loadBackendOrganizationTree(){var tree=await backendRequest("/organizations/tree");syncBackendOrganizations(tree);return tree;}
+    function customerImportPayload(c){
+      var unit=org(c.managingOrgId),backendOrg=unit&&backendOrganizations.find(function(item){return item.frontendId===unit.id;});
+      if(!backendOrg)return null;
+      return {externalId:String(c.id||""),name:String(c.name||""),organizationId:backendOrg.id,ownerName:String(c.owner||"待分配"),kind:c.kind==="猎户"?"猎户":"新客",customerType:"政企客户",carrier:c.carrier||null,industry:c.industry||"待分类",province:c.province||backendOrg.province||null,city:c.city||backendOrg.city||null,area:c.area||backendOrg.district||null,address:c.address||null,contact:c.contact||null,phone:c.phone||null,need:c.need||"需求待识别",stage:c.stage||"线索入池",potential:c.potential||"中",score:Number(c.score)||60,nextAction:c.nextAction||"完成首次触达",isQianBaiWanGroup:customerFlag(c.isQianBaiWanGroup),isKeyAccount:customerFlag(c.isKeyAccount),source:(c.sources||[])[0]||"前端数据适配",createdAt:c.createdAt||null,reasons:c.reasons||[],tags:c.tags||[],stageHistory:c.stageHistory||[],crmFlow:c.crmFlow||[],assignmentReason:c.assignmentReason||"",assignmentConfidence:c.assignmentConfidence||""};
+    }
+    function backendCustomerToFrontend(item){
+      var original=legacyCustomerSeed.find(function(c){return String(c.id)===String(item.externalId||item.id);})||state.customers.find(function(c){return String(c.id)===String(item.externalId||item.id);})||{},backendOrg=backendOrganizations.find(function(orgItem){return orgItem.id===item.organizationId;}),managingOrgId=backendOrg?backendOrg.frontendId:original.managingOrgId;
+      var extra=item.extraData||{},customer=Object.assign({},original,{id:String(item.externalId||item.id),backendId:item.backendId,backendVersion:item.version,backendUpdatedAt:item.updatedAt,name:item.name,managingOrgId:managingOrgId,territoryOrgId:org(managingOrgId)&&org(managingOrgId).parentId,owner:item.ownerName||"待分配",kind:item.kind,customerType:item.customerType||"政企客户",carrier:item.carrier||"",industry:item.industry||"待分类",province:item.province||"",city:item.city||"",area:item.area||"",address:item.address||"",contact:item.contact||"",phone:item.phone||"",need:item.need||"需求待识别",stage:item.stage||"线索入池",potential:item.potential||"中",score:Number(item.score)||0,nextAction:item.nextAction||"完成首次触达",isQianBaiWanGroup:customerFlag(item.isQianBaiWanGroup),isKeyAccount:customerFlag(item.isKeyAccount),createdAt:item.createdAt||original.createdAt||new Date().toISOString(),sources:[item.source||"后端数据库"],reasons:extra.reasons||original.reasons||[],tags:extra.tags||original.tags||[],stageHistory:Array.isArray(extra.stageHistory)?extra.stageHistory:original.stageHistory||[],crmFlow:Array.isArray(extra.crmFlow)?extra.crmFlow:original.crmFlow||[],assignmentReason:extra.assignmentReason||original.assignmentReason||"数据库归属",assignmentConfidence:extra.assignmentConfidence||original.assignmentConfidence||"人工核验"});
+      initializeCrmTracking(customer);return customer;
+    }
+    async function fetchAllBackendCustomers(){
+      var page=1,items=[],result;
+      do{result=await backendRequest("/customers?page="+page+"&pageSize=200");items=items.concat(result.items||[]);page++;}while(items.length<result.total);
+      return items;
+    }
+    function backendOrgToFrontendId(id,code){var item=backendOrganizations.find(function(orgItem){return orgItem.id===id||code&&orgItem.code===code;});if(item)return item.frontendId;if(code==="cmcc")return "cmcc";var plain=String(code||"").replace(/^cmcc-/,""),parts=plain.split("-"),last=parts[parts.length-1],suffix={general:"zh",enterprise:"jk",network:"wl",market:"sc"}[last];if(suffix){parts.pop();return parts.join("-")+(parts.length===2?"-city-":"-")+suffix;}return plain||"cmcc";}
+    function backendApprovalToFrontend(item){
+      var common={id:item.id,customerId:item.customerId,customerName:item.customerName,requesterId:item.requesterId,requesterName:item.requesterName,requesterOrgId:backendOrgToFrontendId(item.requesterOrgId,item.requesterOrgCode),approverOrgId:backendOrgToFrontendId(item.approverOrgId,item.approverOrgCode),reason:item.reason,status:item.status,createdAt:item.createdAt,reviewedAt:item.reviewedAt,reviewerId:item.reviewerId,reviewerName:item.reviewerName,reviewComment:item.reviewComment};
+      if(item.kind==="ownership"){common.before={managingOrgId:backendOrgToFrontendId(item.before.organizationId,item.before.organizationCode),owner:item.before.ownerName};common.after={managingOrgId:backendOrgToFrontendId(item.after.organizationId,item.after.organizationCode),owner:item.after.ownerName};}return common;
+    }
+    async function synchronizeBackendApprovals(){
+      var serverRows=await backendRequest("/customers/requests"),legacyChange=(state.customerChangeRequests||[]).filter(function(item){return !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(item.id);}),legacyDelete=(state.customerDeleteRequests||[]).filter(function(item){return !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(item.id);});
+      state.customerChangeRequests=legacyChange.concat(serverRows.filter(function(item){return item.kind==="ownership";}).map(backendApprovalToFrontend));state.customerDeleteRequests=legacyDelete.concat(serverRows.filter(function(item){return item.kind==="delete";}).map(backendApprovalToFrontend));
+    }
+    async function synchronizeBackendCustomers(allowBootstrap){
+      var items=await fetchAllBackendCustomers();
+      if(!items.length&&allowBootstrap&&currentUser&&["super_admin","group_admin"].indexOf(currentUser.roleCode)>=0&&legacyCustomerSeed.length>=500){
+        var rows=legacyCustomerSeed.map(customerImportPayload).filter(Boolean);
+        if(rows.length){await backendRequest("/customers/import",{method:"POST",body:JSON.stringify({sourceName:"现有HTML客户数据首次迁移",rows:rows})});items=await fetchAllBackendCustomers();}
+      }
+      var locallyArchived=new Set((state.deletedCustomers||[]).filter(function(row){return row.request&&!/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(row.request.id);}).map(function(row){return row.customer&&row.customer.id;}));
+      state.customers=items.filter(function(item){return !locallyArchived.has(item.externalId||item.id);}).map(backendCustomerToFrontend);await synchronizeBackendApprovals();state.meta=state.meta||{};state.meta.customerDataSource="backend";state.meta.total=state.customers.length;updateNavCounts();return state.customers;
+    }
+    async function refreshBackendCustomerDetail(id){
+      var item=await backendRequest("/customers/"+encodeURIComponent(id)),customerItem=backendCustomerToFrontend(item),index=state.customers.findIndex(function(c){return c.id===customerItem.id;});
+      if(index>=0)state.customers[index]=customerItem;else state.customers.push(customerItem);return customerItem;
+    }
     async function loginWithBackend(account,password){
-      var data=await backendRequest("/auth/login",{method:"POST",body:JSON.stringify({username:String(account||"").trim(),password:String(password||"")})},false);sessionStorage.setItem(ACCESS_TOKEN_KEY,data.accessToken);await loadBackendOrganizationTree();var user=backendToFrontendUser(data.user);storeBackendUser(user);return user;
+      var data=await backendRequest("/auth/login",{method:"POST",body:JSON.stringify({username:String(account||"").trim(),password:String(password||"")})},false);sessionStorage.setItem(ACCESS_TOKEN_KEY,data.accessToken);await loadBackendOrganizationTree();var user=backendToFrontendUser(data.user);storeBackendUser(user);await synchronizeBackendCustomers(true);return user;
     }
     async function restoreBackendSession(){
       try{
         if(!sessionStorage.getItem(ACCESS_TOKEN_KEY)&&!await refreshBackendAccessToken())return;
-        await loadBackendOrganizationTree();var apiUser=await backendRequest("/auth/me"),user=backendToFrontendUser(apiUser);storeBackendUser(user);ui.scopeOrgId=user.orgId;$("#loginLayer").classList.remove("show");updateIdentity();render();animatePage();
+        await loadBackendOrganizationTree();var apiUser=await backendRequest("/auth/me"),user=backendToFrontendUser(apiUser);storeBackendUser(user);await synchronizeBackendCustomers(true);ui.scopeOrgId=user.orgId;$("#loginLayer").classList.remove("show");updateIdentity();render();animatePage();
       }catch(error){sessionStorage.removeItem(ACCESS_TOKEN_KEY);sessionStorage.removeItem(SESSION_USER_KEY);sessionStorage.removeItem(SESSION_KEY);currentUser=null;$("#loginLayer").classList.add("show");}
     }
     function loadDeepseekConfig(){
@@ -1834,7 +1871,7 @@
     }
     function directSupervisorOrgId(user){
       var unit=user?org(user.orgId):null;
-      return unit?(unit.parentId||unit.id):null;
+      return unit?(isCustomerManagerUser(user)?unit.id:(unit.parentId||unit.id)):null;
     }
     function customerFlag(value){return value==="是"||value===true?"是":value==="否"||value===false?"否":"待确认";}
     function customerFlagFields(c){return [["isQianBaiWanGroup","是否为千百万集团"],["isKeyAccount","是否要客"]].map(function(item){return '<label class="field"><span class="field-label">'+item[1]+'</span><select class="select" name="'+item[0]+'">'+["待确认","是","否"].map(function(v){return '<option '+(customerFlag(c[item[0]])===v?"selected":"")+'>'+v+'</option>';}).join("")+'</select></label>';}).join("");}
@@ -1886,6 +1923,8 @@
     }
     function customerChangeModal(){customerApprovalModal();}
     function customerDeleteApprovalModal(){customerApprovalModal();}
+    function isBackendApprovalId(id){return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(id||""));}
+    async function openSharedApprovals(){try{await synchronizeBackendApprovals();render();customerApprovalModal();}catch(error){toast(error.message||"客户审批加载失败。","error");}}
     function latestCustomerDeleteRequest(customerId){
       return (state.customerDeleteRequests||[]).filter(function(request){return request.customerId===customerId;}).sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);})[0]||null;
     }
@@ -1978,7 +2017,7 @@
       state.history.push({id:uid("h"),customerId:related.id,time:visit.completedAt,title:isDeal?"成交结果已回填":aiHit?"拜访结果与 AI 纪要已确认":"拜访结果已回填",detail:historyDetail});pendingAiExtraction=null;saveState();return {ok:true,isDeal:isDeal,aiHit:aiHit,visit:visit,customer:related};
     }
     function canEdit(){
-      return canManageCustomerWork(currentUser);
+      return canManageCustomerWork(currentUser)&&currentUser.roleCode!=="viewer";
     }
     function availableOwners(){var scope=activeScope(),names=scopedCustomers(scope.id).map(function(c){return c.owner;});USERS.forEach(function(user){if(isWithin(user.orgId,scope.id)&&canManageCustomerWork(user))names.push(user.name);});if(currentUser)names.push(currentUser.name);return uniqueItems(names);}
     function assignableOwners(depId){return depId?scopedManagerChoices(depId):changeOwners();}
@@ -2273,14 +2312,14 @@
       var pageSize=20,pages=Math.max(1,Math.ceil(list.length/pageSize));ui.customerPage=Math.min(ui.customerPage,pages);
       var rows=list.slice((ui.customerPage-1)*pageSize,ui.customerPage*pageSize);
       var deleteApprovals=pendingCustomerDeleteApprovals();
-      var actions='<button class="btn" data-action="customer-approvals">客户审批 · '+(customerChangeRequests().filter(canReviewCustomerChange).length+deleteApprovals.length)+'</button><button class="btn" data-action="export-customers">⇩ 导出当前范围</button>'+(canEdit()?'<button class="btn btn-primary" data-action="new-customer">＋ 新增线索</button>':"");
+      var actions='<button class="btn" data-action="refresh-customers">↻ 刷新共享客户</button><button class="btn" data-action="customer-approvals">客户审批 · '+(customerChangeRequests().filter(canReviewCustomerChange).length+deleteApprovals.length)+'</button><button class="btn" data-action="export-customers">⇩ 导出当前范围</button>'+(canEdit()?'<button class="btn" data-action="import-data">⇧ 导入客户</button><button class="btn btn-primary" data-action="new-customer">＋ 新增线索</button>':"");
       var recentCutoff=Date.now()-30*86400000,recentTransitions=0,transferCount=0,staleCount=0;
       allCustomers.forEach(function(c){initializeCrmTracking(c);recentTransitions+=c.stageHistory.filter(function(event){return new Date(event.time).getTime()>=recentCutoff;}).length;transferCount+=c.crmFlow.filter(function(event){return event.action==="客户转派"||event.action==="负责人变更";}).length;var latest=c.stageHistory[c.stageHistory.length-1];if(c.stage!=="已成交"&&latest&&daysAgo(latest.time)>7)staleCount++;});
       var reachCounts=crmReachCounts(allCustomers),stageCards=STAGES.map(function(stage,index){var inventory=allCustomers.filter(function(c){return c.stage===stage;}).length;return '<button class="crm-stage-card" data-action="crm-stage-filter" data-stage="'+stage+'"><b>'+inventory+'</b><span>'+stage+' · 当前存量</span><small>累计到达 '+reachCounts[index]+' 个</small></button>';}).join("");
       var body=rows.map(function(c){initializeCrmTracking(c);var lastStage=c.stageHistory[c.stageHistory.length-1],dep=org(c.managingOrgId),deleteRequest=pendingCustomerDeleteRequest(c.id),deleteAction=deleteRequest?'<span class="badge red" title="'+esc(deleteRequest.reason)+'">删除待审批</span>':(canEdit()?'<button class="btn btn-sm btn-danger" data-action="request-customer-delete" data-id="'+c.id+'">申请删除</button>':"");return '<tr><td class="company-cell">'+esc(c.name)+'<div class="muted">客户编号 '+esc(c.id)+' · '+esc(c.need)+'</div></td><td>'+esc(customerFlag(c.isQianBaiWanGroup))+'</td><td>'+esc(customerFlag(c.isKeyAccount))+'</td><td>'+badge(c.kind,c.kind==="新客"?"blue":"purple")+" "+badge(c.customerType,"orange")+(c.carrier?'<div class="muted">'+esc(c.carrier)+'</div>':"")+'</td><td>'+esc(c.industry)+'<div class="muted">'+esc(c.area)+'</div></td><td>'+esc(c.contact||"待补充")+'<div class="muted">'+esc(c.phone||"信息待补充")+'</div></td><td>'+esc((dep?org(dep.parentId).name+" / "+dep.name:"待分配")+' → '+c.owner)+'<div class="muted">'+esc(c.city+' / '+c.area)+'</div></td><td>'+badge(c.stage,stageClass(c.stage))+'<div class="muted">'+fmtDate(lastStage?lastStage.time:c.createdAt)+' 更新</div></td><td><b style="color:'+(c.score>=80?"var(--orange)":"var(--blue)")+'">'+c.score+'</b></td><td><div class="row-actions"><button class="btn btn-sm" data-action="customer-detail" data-id="'+c.id+'">查看流转</button>'+deleteAction+'</div></td></tr>';}).join("");
       if(!body)body='<tr><td colspan="10"><div class="empty"><strong>当前筛选条件下没有客户</strong>请调整关键词或筛选条件；集客部也可以新增政企客户线索。</div></td></tr>';
       return head(actions)+
-        '<div class="data-note section-gap">千百万集团、要客的随机分配值仅供演示，不代表真实业务认定；已人工设置的值保留。新增区县补齐客户为模拟样例，地址待核验；历史执行人不作为当前跨区分工依据。</div><section class="crm-guide"><div class="crm-guide-step"><i>1</i><b>数据归集</b><span>政企新客 / 猎户进入集团池</span></div><div class="crm-guide-step"><i>2</i><b>集团分发</b><span>按省级组织下发</span></div><div class="crm-guide-step"><i>3</i><b>属地接收</b><span>市级 / 区县承接</span></div><div class="crm-guide-step"><i>4</i><b>部门认领</b><span>统一进入集客部</span></div><div class="crm-guide-step"><i>5</i><b>责任到人</b><span>客户经理持续跟进</span></div><div class="crm-guide-step"><i>6</i><b>阶段转化</b><span>联系至成交全留痕</span></div></section>'+
+        '<div class="data-note section-gap"><b>共享数据库已连接：</b>当前客户清单来自后端 PostgreSQL，并已按登录人的组织和角色过滤。其他成员导入的数据在你的授权范围内会自动共享；千百万集团、要客等演示标记不代表真实业务认定。</div><section class="crm-guide"><div class="crm-guide-step"><i>1</i><b>数据归集</b><span>政企新客 / 猎户进入集团池</span></div><div class="crm-guide-step"><i>2</i><b>集团分发</b><span>按省级组织下发</span></div><div class="crm-guide-step"><i>3</i><b>属地接收</b><span>市级 / 区县承接</span></div><div class="crm-guide-step"><i>4</i><b>部门认领</b><span>统一进入集客部</span></div><div class="crm-guide-step"><i>5</i><b>责任到人</b><span>客户经理持续跟进</span></div><div class="crm-guide-step"><i>6</i><b>阶段转化</b><span>联系至成交全留痕</span></div></section>'+
         '<section class="metrics"><div class="metric card"><div class="metric-label">授权范围客户</div><div class="metric-value">'+allCustomers.length+'</div><div class="metric-foot">全部有组织归属与负责人</div></div><div class="metric card" style="--metric-bg:#edf4ff"><div class="metric-label">近 30 天阶段动作</div><div class="metric-value">'+recentTransitions+'</div><div class="metric-foot">推进与回退均有记录</div></div><div class="metric card" style="--metric-bg:#f1edff"><div class="metric-label">累计转派 / 改派</div><div class="metric-value">'+transferCount+'</div><div class="metric-foot">部门和负责人变化可追溯</div></div><div class="metric card" style="--metric-bg:#fff4df"><div class="metric-label">阶段停留超 7 天</div><div class="metric-value">'+staleCount+'</div><div class="metric-foot warn">建议主管优先干预</div></div></section>'+ 
         '<section class="card"><div class="panel-head"><div><h2>CRM 阶段总览</h2><p>"当前存量"回答客户现在在哪里，"累计到达"回答客户曾经走到哪里；点击阶段可查看明细。</p></div><button class="panel-link" data-route="analytics">查看转化链路 →</button></div><div class="crm-stage-strip">'+stageCards+'</div></section>'+ 
         '<div class="filterbar card section-gap"><label class="search-box"><span>⌕</span><input id="customerQuery" aria-label="搜索 CRM 客户" value="'+esc(ui.customerQuery)+'" placeholder="搜索政企客户、联系人、需求或负责人"></label><select class="select filter-select" id="customerStage" aria-label="按经营阶段筛选客户"><option value="all">全部阶段</option>'+STAGES.map(function(s){return '<option '+(ui.customerStage===s?"selected":"")+'>'+s+'</option>';}).join("")+'</select><select class="select filter-select" id="customerKind" aria-label="按线索类型筛选客户"><option value="all">新客 + 猎户</option><option '+(ui.customerKind==="新客"?"selected":"")+'>新客</option><option '+(ui.customerKind==="猎户"?"selected":"")+'>猎户</option></select><span class="scope-pill">政企客户 · 集客部</span><span class="muted">共 '+list.length+' 条</span></div><div class="card table-wrap"><table><thead><tr><th>客户名称</th><th>是否为千百万集团</th><th>是否要客</th><th>线索 / 客群</th><th>行业 / 区域</th><th>联系人</th><th>经营部门 → 负责人</th><th>当前阶段</th><th>评分</th><th>操作</th></tr></thead><tbody>'+body+'</tbody></table><div class="pager"><span class="muted">第 '+ui.customerPage+' / '+pages+' 页</span><button class="btn btn-sm" data-action="page" data-page="'+(ui.customerPage-1)+'" '+(ui.customerPage<=1?"disabled":"")+'>上一页</button><button class="btn btn-sm" data-action="page" data-page="'+(ui.customerPage+1)+'" '+(ui.customerPage>=pages?"disabled":"")+'>下一页</button></div></div>';
@@ -2376,10 +2415,10 @@
       var customers=scopedCustomers(),customerIds=new Set(customers.map(function(c){return c.id;})),dup=duplicates(),visitDup=duplicateVisitConflicts(),reviews=(state.reviewQueue||[]).filter(function(item){return customerIds.has(item.existingCustomerId)&&item.status==="待人工复核";}),missing=customers.filter(function(c){return !c.phone;});
       var stale=customers.filter(function(c){return c.stage!=="已成交"&&daysAgo(c.lastContact)>7;});
       var sourceCards=state.sources.map(function(s){var count=customers.filter(function(c){return (c.sources||[]).indexOf(s.name)>=0;}).length;return '<div class="source-card card"><div class="source-icon">数</div><strong>'+count+'</strong><p>'+esc(s.name)+" · "+esc(s.type)+'<br>最近归集 '+fmtDate(s.lastSync)+'</p></div>';}).join("");
-      return head('<button class="btn" data-action="download-template">⇩ 下载模板</button><button class="btn btn-primary" data-action="import-data">＋ 导入客户数据</button>')+
+      return head('<button class="btn" data-action="download-template">⇩ 下载模板</button>'+(canEdit()?'<button class="btn btn-primary" data-action="import-data">＋ 导入客户数据</button>':""))+
         '<section class="source-grid">'+sourceCards+'</section>'+
         '<section class="quality-grid section-gap"><div class="quality-card card"><span class="muted">当前授权数据</span><strong style="color:var(--blue)">'+customers.length+'</strong><p>内置500条模拟客户及21家公开真实企业资料。</p></div><div class="quality-card card"><span class="muted">疑似重复档案</span><strong style="color:var(--red)">'+dup.length+'</strong><p>按规范化企业名称与电话识别。</p></div><div class="quality-card card"><span class="muted">导入待人工复核</span><strong style="color:var(--orange)">'+reviews.length+'</strong><p>疑似记录不会自动合并。</p></div><div class="quality-card card"><span class="muted">重复拜访冲突</span><strong style="color:var(--red)">'+visitDup.length+'</strong><p>同一客户存在多个未完成任务。</p></div><div class="quality-card card"><span class="muted">关键信息缺失</span><strong style="color:var(--orange)">'+missing.length+'</strong><p>联系人或联系电话仍待补充。</p></div><div class="quality-card card"><span class="muted">跟进状态陈旧</span><strong style="color:var(--purple)">'+stale.length+'</strong><p>超过 7 天未更新经营状态。</p></div></section>'+
-        '<section class="card section-gap"><div class="panel-head"><div><h2>数据共享与交换</h2><p>导出只包含当前登录身份及所选组织范围内的数据。</p></div></div><div style="display:flex;gap:9px;flex-wrap:wrap;padding:0 19px 17px"><button class="btn" data-action="export-customers">导出客户 CSV</button><button class="btn" data-action="export-json">导出当前范围备份</button><button class="btn btn-danger" data-action="reset-data">恢复内置数据</button></div></section>'+
+        '<section class="card section-gap"><div class="panel-head"><div><h2>数据共享与交换</h2><p>导出只包含当前登录身份及所选组织范围内的数据。</p></div></div><div style="display:flex;gap:9px;flex-wrap:wrap;padding:0 19px 17px"><button class="btn" data-action="export-customers">导出客户 CSV</button><button class="btn" data-action="export-json">导出当前范围备份</button><button class="btn btn-danger" data-action="reset-data">重置本地演示记录</button></div></section>'+
         '<div class="data-note section-gap"><b>指标口径：</b>客户重复识别召回率应在人工标注验证集计算；疑似记录只进入人工复核，不自动合并。创建拜访任务时会对当前授权范围内同一客户的全部未完成任务进行冲突检查，确需重复创建时必须填写授权说明。</div><div class="data-note section-gap"><b>数据说明：</b>原500家模拟客户使用500个互不重复的公开地点地址，仅供地图联调，不代表企业实际驻址；手工修改地址予以保留。地点资料不等于导航定位核验；另含深圳、广州、东莞各7家公开真实企业。真实企业的联系人、运营商及需求待核验，新客表示新入库而非新成立。</div>';
     }
     function render(){
@@ -2728,30 +2767,29 @@
     }
     function importModal(){
       if(!canEdit())return toast("当前角色不能导入客户。","error");
-      openModal("导入政企客户数据",'<div class="detail-hero"><b>支持 CSV 文件</b><p class="subtitle">字段：企业名称、线索类型、行业、联系人、电话、需求。导入数据统一作为政企客户进入当前授权范围内的集客部。</p></div><label class="field" style="margin-top:15px"><span class="field-label">选择 CSV 文件</span><input class="input" type="file" id="csvFile" accept=".csv,text/csv" style="padding-top:7px"></label><div class="data-note" style="margin-top:10px">导入只新增明确的新记录；疑似重复项进入人工复核，不自动合并，也不会删除现有记录。</div>',false,'<button class="btn" data-action="download-template">下载模板</button><button class="btn btn-primary" data-action="close-modal">完成</button>');
+      openModal("导入政企客户数据",'<div class="detail-hero"><b>支持 CSV 文件并写入共享数据库</b><p class="subtitle">字段：企业名称、线索类型、行业、联系人、电话、需求。导入数据统一作为政企客户进入当前授权范围内的集客部。</p></div><label class="field" style="margin-top:15px"><span class="field-label">选择 CSV 文件</span><input class="input" type="file" id="csvFile" accept=".csv,text/csv" style="padding-top:7px"></label><div class="data-note" style="margin-top:10px">后端将校验组织权限并按客户编号、同组织企业名称和联系电话去重；导入批次、导入人和统计结果会保留在数据库中。</div>',false,'<button class="btn" data-action="download-template">下载模板</button><button class="btn btn-primary" data-action="close-modal">完成</button>');
     }
     function parseCSV(text){
       var rows=[],row=[],cell="",quoted=false;
       for(var i=0;i<text.length;i++){var ch=text[i],next=text[i+1];if(ch==='"'&&quoted&&next==='"'){cell+='"';i++;}else if(ch==='"'){quoted=!quoted;}else if(ch===","&&!quoted){row.push(cell);cell="";}else if((ch==="\n"||ch==="\r")&&!quoted){if(ch==="\r"&&next==="\n")i++;row.push(cell);if(row.some(function(x){return x.trim();}))rows.push(row);row=[];cell="";}else cell+=ch;}
       row.push(cell);if(row.some(function(x){return x.trim();}))rows.push(row);return rows;
     }
-    function importCSV(text){
+    async function importCSV(text){
       var rows=parseCSV(text.replace(/^\uFEFF/,""));if(rows.length<2)throw new Error("CSV 中没有可导入的数据");
       var headers=rows[0].map(function(h){return h.trim();});
       function index(names){for(var i=0;i<names.length;i++){var n=headers.indexOf(names[i]);if(n>=0)return n;}return -1;}
       var map={isQianBaiWanGroup:index(["是否为千百万集团"]),isKeyAccount:index(["是否要客"]),name:index(["企业名称","客户名称"]),kind:index(["线索类型","新客/猎户"]),industry:index(["行业"]),contact:index(["联系人"]),phone:index(["电话","联系电话"]),need:index(["需求"])};
       if(map.name<0)throw new Error("缺少“客户名称”列");
-      var added=0,review=0;
+      var payloadRows=[];
       rows.slice(1).forEach(function(r){
         function val(k){return map[k]>=0?(r[map[k]]||"").trim():"";}
         var name=val("name");if(!name)return;
-        var customerType="政企客户",dep=defaultDepartment();
+        var dep=defaultDepartment();
         if(!dep)throw new Error("当前组织范围内没有可承载政企客户的集客部");
-        var existing=scopedCustomers(currentUser.orgId).find(function(c){return normalizeName(c.name)===normalizeName(name)||(val("phone")&&c.phone===val("phone"));});
-        if(existing){state.reviewQueue=state.reviewQueue||[];state.reviewQueue.push({id:uid("review"),existingCustomerId:existing.id,name:name,phone:val("phone"),source:"CSV导入",reason:val("phone")&&existing.phone===val("phone")?"联系电话相同":"企业名称相同",createdAt:new Date().toISOString(),status:"待人工复核"});review++;return;}
-        var c={id:uid("c"),name:name,isQianBaiWanGroup:customerFlag(val("isQianBaiWanGroup")),isKeyAccount:customerFlag(val("isKeyAccount")),kind:val("kind")==="猎户"?"猎户":"新客",customerType:customerType,carrier:val("kind")==="猎户"?"待核验":"",industry:val("industry")||"待分类",province:dep.province,city:dep.city,area:dep.district,contact:val("contact"),phone:val("phone"),sources:["CSV导入"],need:val("need")||"需求待识别",owner:scopedManagerChoices(dep.id)[0],stage:"线索入池",potential:"中",lastContact:null,nextAction:"完成首次触达",createdAt:new Date().toISOString(),address:"",territoryOrgId:dep.parentId,managingOrgId:dep.id,assignmentReason:"政企客户统一归入集客部",assignmentConfidence:"待核验",tags:["新导入",customerType,dep.name],reasons:[]};c.score=scoreCustomer(c);c.reasons=recommendationReasons(c);initializeCrmTracking(c);state.customers.push(c);added++;
+        var frontendCustomer={id:uid("c"),name:name,isQianBaiWanGroup:customerFlag(val("isQianBaiWanGroup")),isKeyAccount:customerFlag(val("isKeyAccount")),kind:val("kind")==="猎户"?"猎户":"新客",customerType:"政企客户",carrier:val("kind")==="猎户"?"待核验":"",industry:val("industry")||"待分类",province:dep.province,city:dep.city,area:dep.district,contact:val("contact"),phone:val("phone"),sources:["CSV导入"],need:val("need")||"需求待识别",owner:scopedManagerChoices(dep.id)[0]||"待分配",stage:"线索入池",potential:"中",nextAction:"完成首次触达",createdAt:new Date().toISOString(),address:"",managingOrgId:dep.id,tags:["新导入","政企客户",dep.name],reasons:[]};frontendCustomer.score=scoreCustomer(frontendCustomer);frontendCustomer.reasons=recommendationReasons(frontendCustomer);var payload=customerImportPayload(frontendCustomer);if(payload)payloadRows.push(payload);
       });
-      saveState();return {added:added,review:review};
+      if(!payloadRows.length)throw new Error("CSV 中没有可导入的有效客户");
+      var result=await backendRequest("/customers/import",{method:"POST",body:JSON.stringify({sourceName:"CSV客户导入",rows:payloadRows})});await synchronizeBackendCustomers(false);return {added:result.inserted,review:result.duplicates,rejected:result.rejected||0};
     }
     function csvEscape(v){var s=String(v==null?"":v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
     function download(name,content,type){
@@ -2853,24 +2891,26 @@
       else if(name==="clear-support"){ui.supportMessages=[];render();}
       else if(name==="support-route"){var supportRoute=action.dataset.targetRoute;go(supportRoute);}
       else if(name==="new-customer")newCustomerModal();
-      else if(name==="customer-detail")customerDetailModal(id);
+      else if(name==="customer-detail"){try{await refreshBackendCustomerDetail(id);customerDetailModal(id);}catch(error){toast(error.message||"客户详情加载失败。","error");}}
+      else if(name==="refresh-customers"){try{await synchronizeBackendCustomers(false);render();toast("已从共享数据库刷新当前授权范围的客户与审批。");}catch(error){toast(error.message||"共享客户刷新失败。","error");}}
       else if(name==="request-customer-delete")customerDeleteRequestModal(id);
-      else if(name==="customer-change-approvals"||name==="customer-approvals")customerChangeModal();
+      else if(name==="customer-change-approvals"||name==="customer-approvals")await openSharedApprovals();
       else if(name==="approve-customer-change"||name==="reject-customer-change"){
         var acceptChange=name==="approve-customer-change",changeComment=acceptChange?"审核通过":prompt("请填写驳回原因（必填）");
         if(changeComment===null)return;
         if(acceptChange&&!confirm("确认通过该客户的归属地 / 客户经理变更？"))return;
-        var changeResult=reviewCustomerChange(id,acceptChange,changeComment);if(!changeResult.ok)return toast(changeResult.message,"error");
-        render();customerChangeModal();toast(acceptChange?"审批通过，客户归属已更新。":"申请已驳回，原归属保持不变。");
+        if(isBackendApprovalId(id)){try{await backendRequest("/customers/requests/"+encodeURIComponent(id)+"/decision",{method:"POST",body:JSON.stringify({approve:acceptChange,comment:changeComment})});await synchronizeBackendCustomers(false);render();customerApprovalModal();toast(acceptChange?"审批通过，客户归属已更新。":"申请已驳回，原归属保持不变。");}catch(error){toast(error.message||"客户变更审批失败。","error");}return;}
+        var changeResult=reviewCustomerChange(id,acceptChange,changeComment);if(!changeResult.ok)return toast(changeResult.message,"error");render();customerChangeModal();toast(acceptChange?"审批通过，客户归属已更新。":"申请已驳回，原归属保持不变。");
       }
-      else if(name==="customer-delete-approvals")customerDeleteApprovalModal();
+      else if(name==="customer-delete-approvals")await openSharedApprovals();
       else if(name==="approve-customer-delete"){
         var approvalRequest=(state.customerDeleteRequests||[]).find(function(request){return request.id===id;});
         if(!approvalRequest)return toast("未找到删除申请。","error");
-        if(confirm("确定审批通过并从业务列表删除客户"+approvalRequest.customerName+"吗？关联拜访和互动记录将进入审计归档。")){var approvalResult=approveCustomerDeleteRequest(id,"直属上级审批通过");if(!approvalResult.ok)return toast(approvalResult.message,"error");render();customerDeleteApprovalModal();toast("审批已通过，客户已移出业务列表并进入审计归档。");}
+        if(confirm("确定审批通过并从业务列表删除客户"+approvalRequest.customerName+"吗？关联拜访和互动记录将进入审计归档。")){if(isBackendApprovalId(id)){try{await backendRequest("/customers/requests/"+encodeURIComponent(id)+"/decision",{method:"POST",body:JSON.stringify({approve:true,comment:"直属上级审批通过"})});await synchronizeBackendCustomers(false);render();customerApprovalModal();toast("审批已通过，客户已移出共享业务列表，数据库保留审计记录。");}catch(error){toast(error.message||"客户删除审批失败。","error");}return;}var approvalResult=approveCustomerDeleteRequest(id,"直属上级审批通过");if(!approvalResult.ok)return toast(approvalResult.message,"error");render();customerDeleteApprovalModal();toast("审批已通过，客户已移出业务列表并进入审计归档。");}
       }
       else if(name==="reject-customer-delete"){
         var rejectComment=String(window.prompt("请填写驳回原因；客户将继续保留在 CRM 中。","")||"").trim();if(!rejectComment)return;
+        if(isBackendApprovalId(id)){try{await backendRequest("/customers/requests/"+encodeURIComponent(id)+"/decision",{method:"POST",body:JSON.stringify({approve:false,comment:rejectComment})});await synchronizeBackendApprovals();render();customerApprovalModal();toast("删除申请已驳回，客户继续保留。");}catch(error){toast(error.message||"客户删除驳回失败。","error");}return;}
         var rejectResult=rejectCustomerDeleteRequest(id,rejectComment);if(!rejectResult.ok)return toast(rejectResult.message,"error");render();customerDeleteApprovalModal();toast("删除申请已驳回，客户继续保留。");
       }
       else if(name==="edit-customer"){closeModal();editCustomerModal(id);}
@@ -2901,7 +2941,7 @@
       else if(name==="download-template"){download("智拓政企客户导入模板.csv","企业名称,线索类型,行业,联系人,电话,需求\r\n深圳示例数字科技有限公司,新客,软件与信息服务,张经理,13*********,企业专线\r\n深圳示例智能制造有限公司,猎户,先进制造,李经理,13*********,5G专网","text/csv;charset=utf-8");toast("政企客户导入模板已下载。");}
       else if(name==="import-data")importModal();
       else if(name==="export-json"){var data={customers:scopedCustomers(),visits:scopedVisits(),scope:orgPathText(activeScope().id),exportedAt:new Date().toISOString()};download("智拓当前范围备份.json",JSON.stringify(data,null,2),"application/json");toast("当前范围备份已导出。");}
-      else if(name==="reset-data"){if(!isUserAdministrator(currentUser))return toast("仅集团经营管理员可以恢复全库内置数据。","error");if(confirm("确定恢复内置500条模拟客户及21家公开企业资料吗？当前页面内的新增和修改将被替换。")){state=buildSeedData();saveState();render();toast("已恢复内置数据。");}}
+      else if(name==="reset-data"){if(!isUserAdministrator(currentUser))return toast("仅集团经营管理员可以重置本地演示记录。","error");if(confirm("仅重置当前浏览器的演示记录（如拜访和文档），不会删除或覆盖共享数据库中的客户。确定继续吗？")){state=buildSeedData();await synchronizeBackendCustomers(false);saveState();render();toast("本地演示记录已重置，客户已从共享数据库重新读取。");}}
       else if(name==="page"){ui.customerPage=Math.max(1,Number(action.dataset.page)||1);render();}
       else if(name==="copy-brief"){var c=customer(id);if(c){var b=aiService.generateVisitBrief(c);copyText("AI 拜访简报｜"+c.name+"\n\n本次拜访目标\n"+b.target+"\n\n客户基本情况\n- "+b.basics.join("\n- ")+"\n\n建议重点了解\n- "+b.focus.join("\n- ")+"\n\n推荐沟通问题\n- "+b.questions.join("\n- ")+"\n\n风险提醒\n- "+b.risks.join("\n- ")+"\n\n下一步目标\n"+b.nextGoal);toast("AI 拜访简报已复制。");}}
     });
@@ -2924,7 +2964,7 @@
       else if(e.target.id==="userOrgLevel")updateUserOrganizationOptions();
       else if(e.target.id==="userOrgId")updateUserRoleOptions();
       else if(e.target.id==="deepseekModel"){var selectedInfo=aiModelInfo(e.target.value),providerLabel=$("#aiProviderKeyLabel"),testResult=$("#deepseekTestResult");if(providerLabel)providerLabel.textContent=selectedInfo.providerName;if(testResult){testResult.className="deepseek-test-result";testResult.textContent="请确认输入的是 "+selectedInfo.providerName+" 的 API Key，再测试连接。";}deepseekTestDraft=null;}
-      else if(e.target.id==="csvFile"&&e.target.files[0]){var reader=new FileReader();reader.onload=function(){try{var result=importCSV(reader.result);closeModal();render();toast("导入完成：新增 "+result.added+" 条，转人工复核 "+result.review+" 条。");}catch(err){toast(err.message,"error");}};reader.readAsText(e.target.files[0],"UTF-8");}
+      else if(e.target.id==="csvFile"&&e.target.files[0]){var reader=new FileReader();reader.onload=async function(){try{var result=await importCSV(reader.result);closeModal();render();toast("已写入共享数据库：新增 "+result.added+" 条，重复 "+result.review+" 条，拒绝 "+result.rejected+" 条。");}catch(err){toast(err.message,"error");}};reader.readAsText(e.target.files[0],"UTF-8");}
     });
     document.addEventListener("click",function(e){var tab=e.target.closest("[data-visit-tab]");if(tab){ui.visitTab=tab.dataset.visitTab;render();}});
     document.addEventListener("submit",async function(e){
@@ -2954,12 +2994,12 @@
         if(scopedManagerChoices(dep.id).indexOf(f.owner)<0)return toast("所选负责人不在当前可分配范围。","error");
         var dup=scopedCustomers(currentUser.orgId).find(function(c){return normalizeName(c.name)===normalizeName(f.name)||(f.phone&&c.phone===f.phone);});
         if(dup)return toast("已存在疑似客户"+dup.name+"。","error");
-        var c={id:uid("c"),name:f.name.trim(),isQianBaiWanGroup:customerFlag(f.isQianBaiWanGroup),isKeyAccount:customerFlag(f.isKeyAccount),kind:f.kind,customerType:"政企客户",carrier:f.kind==="猎户"?"待核验":"",industry:f.industry||"待分类",province:dep.province,city:dep.city,area:dep.district,contact:f.contact,phone:f.phone,sources:[f.kind==="猎户"?"猎户清单":"新客名录"],need:f.need||"需求待识别",owner:f.owner,stage:"线索入池",potential:f.potential,lastContact:null,nextAction:"完成首次触达",createdAt:new Date().toISOString(),address:"",territoryOrgId:dep.parentId,managingOrgId:dep.id,assignmentReason:"政企客户统一归入集客部",assignmentConfidence:"人工确认",tags:[f.kind,"政企客户",dep.name],reasons:[]};c.score=scoreCustomer(c);c.reasons=recommendationReasons(c);initializeCrmTracking(c);state.customers.push(c);saveState();closeModal();ui.route="customers";ui.customerPage=1;render();toast("政企客户已保存并归属"+dep.name+"，CRM 责任链已建立，初始评分 "+c.score+" 分。");return;
+        var c={id:uid("c"),name:f.name.trim(),isQianBaiWanGroup:customerFlag(f.isQianBaiWanGroup),isKeyAccount:customerFlag(f.isKeyAccount),kind:f.kind,customerType:"政企客户",carrier:f.kind==="猎户"?"待核验":"",industry:f.industry||"待分类",province:dep.province,city:dep.city,area:dep.district,contact:f.contact,phone:f.phone,sources:[f.kind==="猎户"?"猎户清单":"新客名录"],need:f.need||"需求待识别",owner:f.owner,stage:"线索入池",potential:f.potential,nextAction:"完成首次触达",createdAt:new Date().toISOString(),address:"",managingOrgId:dep.id,tags:[f.kind,"政企客户",dep.name],reasons:[]};c.score=scoreCustomer(c);c.reasons=recommendationReasons(c);
+        var importRow=customerImportPayload(c);if(!importRow)return toast("未找到该集客部对应的后端组织，请刷新页面后重试。","error");
+        try{var created=await backendRequest("/customers/import",{method:"POST",body:JSON.stringify({sourceName:"页面新增线索",rows:[importRow]})});if(!created.inserted)return toast("该客户已存在于共享数据库，请使用搜索查看。","error");await synchronizeBackendCustomers(false);closeModal();ui.route="customers";ui.customerPage=1;render();toast("政企客户已写入共享数据库并归属"+dep.name+"，初始评分 "+c.score+" 分。");}catch(error){toast(error.message||"客户保存失败。","error");}return;
       }
       if(e.target.id==="customerDeleteForm"){
-        var deleteData=Object.fromEntries(new FormData(e.target)),deleteResult=submitCustomerDeleteRequest(deleteData.customerId,deleteData.reason);
-        if(!deleteResult.ok)return toast(deleteResult.message,"error");
-        closeModal();render();toast("删除申请已提交至"+org(deleteResult.request.approverOrgId).name+"，审批前不会删除客户。");return;
+        var deleteData=Object.fromEntries(new FormData(e.target));try{var deleteRequest=await backendRequest("/customers/"+encodeURIComponent(deleteData.customerId)+"/requests",{method:"POST",body:JSON.stringify({kind:"delete",reason:String(deleteData.reason||"").trim()})});await synchronizeBackendApprovals();closeModal();render();toast("删除申请已提交至"+org(backendOrgToFrontendId(deleteRequest.approverOrgId,deleteRequest.approverOrgCode)).name+"，审批前不会删除客户。");}catch(error){toast(error.message||"删除申请提交失败。","error");}return;
       }
       if(e.target.getAttribute("id")==="customerEditForm"){
         var editData=Object.fromEntries(new FormData(e.target)),editCustomer=customer(editData.id),editDep=org(editData.managingOrgId);
@@ -2973,9 +3013,13 @@
         if(flowChanged&&!flowReason)return toast("调整部门、负责人或经营阶段时，请填写流转说明。","error");
         if(flowReason.length>300)return toast("流转说明不能超过 300 个字。","error");
         var ownershipChanged=oldOrgId!==editDep.id||oldOwner!==editData.owner;
-        if(ownershipChanged){var changeSubmit=submitCustomerChange(editCustomer.id,editDep.id,editData.owner,flowReason);if(!changeSubmit.ok)return toast(changeSubmit.message,"error");}
+        if(ownershipChanged&&(flowReason.length<5||pendingCustomerChange(editCustomer.id)||pendingCustomerDeleteRequest(editCustomer.id)))return toast("归属变更需填写至少 5 字原因，且不能存在待审批申请。","error");
+        var editedSnapshot=Object.assign({},editCustomer,{stageHistory:(editCustomer.stageHistory||[]).slice(),name:editData.name,industry:editData.industry||"待分类",contact:editData.contact,phone:editData.phone,need:editData.need,potential:editData.potential,nextAction:editData.nextAction,isQianBaiWanGroup:customerFlag(editData.isQianBaiWanGroup),isKeyAccount:customerFlag(editData.isKeyAccount)});
+        recordStageTransition(editedSnapshot,editData.stage,"CRM手工更新",flowReason);editedSnapshot.score=scoreCustomer(editedSnapshot);editedSnapshot.reasons=recommendationReasons(editedSnapshot);
+        try{var savedCustomer=await backendRequest("/customers/"+encodeURIComponent(editCustomer.id),{method:"PATCH",body:JSON.stringify({name:editedSnapshot.name,industry:editedSnapshot.industry,contact:editedSnapshot.contact,phone:editedSnapshot.phone,need:editedSnapshot.need,stage:editedSnapshot.stage,potential:editedSnapshot.potential,score:editedSnapshot.score,nextAction:editedSnapshot.nextAction,isQianBaiWanGroup:editedSnapshot.isQianBaiWanGroup,isKeyAccount:editedSnapshot.isKeyAccount,stageHistory:editedSnapshot.stageHistory,reasons:editedSnapshot.reasons,version:editCustomer.backendVersion})});editCustomer.backendVersion=savedCustomer.version;editCustomer.backendUpdatedAt=savedCustomer.updatedAt;}catch(error){return toast(error.message||"客户资料保存失败。","error");}
+        if(ownershipChanged){var targetBackendOrg=backendOrganizations.find(function(item){return item.frontendId===editDep.id;});if(!targetBackendOrg)return toast("目标组织未与后端同步，请刷新页面。","error");try{await backendRequest("/customers/"+encodeURIComponent(editCustomer.id)+"/requests",{method:"POST",body:JSON.stringify({kind:"ownership",reason:flowReason,targetOrganizationId:targetBackendOrg.id,targetOwnerName:editData.owner})});await synchronizeBackendApprovals();}catch(error){return toast(error.message||"归属变更申请失败；其他资料已保存。","error");}}
         editData.owner=oldOwner;editDep=org(oldOrgId);
-        recordStageTransition(editCustomer,editData.stage,"CRM手工更新",flowReason);
+        editCustomer.stageHistory=editedSnapshot.stageHistory;editCustomer.stage=editedSnapshot.stage;
         editCustomer.isQianBaiWanGroup=customerFlag(editData.isQianBaiWanGroup);editCustomer.isKeyAccount=customerFlag(editData.isKeyAccount);
         editCustomer.name=editData.name.trim();editCustomer.customerType="政企客户";editCustomer.industry=editData.industry.trim()||"待分类";editCustomer.contact=editData.contact.trim();editCustomer.phone=editData.phone.trim();editCustomer.need=editData.need.trim();editCustomer.owner=editData.owner;editCustomer.potential=editData.potential;editCustomer.nextAction=editData.nextAction.trim();editCustomer.managingOrgId=editDep.id;editCustomer.territoryOrgId=editDep.parentId;editCustomer.province=editDep.province;editCustomer.city=editDep.city;editCustomer.area=editDep.district;editCustomer.assignmentReason="政企客户统一归入集客部";editCustomer.assignmentConfidence="人工确认";editCustomer.score=scoreCustomer(editCustomer);editCustomer.reasons=recommendationReasons(editCustomer);
         state.history.push({id:uid("h"),customerId:editCustomer.id,time:new Date().toISOString(),title:ownershipChanged?"客户资料已保存，归属变更待审批":flowChanged?"CRM 客户流转已更新":"客户资料已编辑",detail:ownershipChanged?currentUser.name+"保存基础资料；归属地和客户经理待上级审批，暂未生效。":flowChanged?currentUser.name+"完成客户流转："+flowReason:currentUser.name+"更新了客户基础资料。"});saveState();closeModal();render();toast(ownershipChanged?"归属变更已提交上级审批，原归属与客户经理暂不变；其他资料已保存。":flowChanged?"CRM 流转已保存，部门、负责人和阶段变化均已留痕。":"客户资料已保存，评分同步更新为 "+editCustomer.score+" 分。");return;
