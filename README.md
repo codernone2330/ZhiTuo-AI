@@ -8,6 +8,7 @@
 - `src/ZhiTuoNativeServer.py`：现有 8766 演示服务，继续兼容企查查与多模型 AI 调用。
 - `src/map_integration.py`：现有 8767 地图能力演示服务。
 - `backend/`：FastAPI + PostgreSQL 模块化后端公共骨架。
+- `log_in/`、`src/zhituo_backend.py`：保留 `main` 分支原有的独立 SQLite/RBAC 原型；当前 `/app/` 页面使用 `backend/` 服务，两套数据不自动同步。
 - `docs/公共骨架搭建说明.md`：骨架结构、设计依据、启动方式与团队协作说明。
 
 ## 后端快速启动

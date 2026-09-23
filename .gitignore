@@ -18,6 +18,7 @@ venv/
 
 # Runtime data
 *.db
+*.db-*
 *.sqlite
 *.sqlite3
 *.log
@@ -28,6 +29,10 @@ src/.cache/
 .idea/
 .DS_Store
 Thumbs.db
+~$*
+.~lock.*
+*冲突副本*
+*conflict copy*
 
 # Build artifacts
 build/
