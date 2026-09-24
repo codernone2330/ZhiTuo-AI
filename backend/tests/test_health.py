@@ -31,6 +31,11 @@ def test_frontend_is_served_by_the_backend() -> None:
     assert response.status_code == 200
     assert "智拓 · 商机作战助手" in response.text
     assert "loginWithBackend" in response.text
+    assert 'location.pathname.indexOf("/app/")===0?location.origin' in response.text
+
+    logo = client.get("/app/china-mobile-logo.svg")
+    assert logo.status_code == 200
+    assert b"<svg" in logo.content
 
 
 def test_openapi_registers_unified_map_routes() -> None:
@@ -44,3 +49,19 @@ def test_openapi_registers_customer_read_chain() -> None:
     assert "/api/v1/customers" in paths
     assert "/api/v1/customers/import" in paths
     assert "/api/v1/customers/{customer_ref}" in paths
+
+
+def test_openapi_registers_frontend_workflows() -> None:
+    paths = app.openapi()["paths"]
+    assert {
+        "/api/v1/auth/login",
+        "/api/v1/organizations/tree",
+        "/api/v1/customers",
+        "/api/v1/visits",
+        "/api/v1/opportunities/refresh",
+        "/api/v1/maps/visit-route",
+        "/api/v1/ai/leads/capture",
+        "/api/v1/ai/chat",
+        "/api/v1/documents",
+        "/api/v1/reports/weekly",
+    }.issubset(paths)

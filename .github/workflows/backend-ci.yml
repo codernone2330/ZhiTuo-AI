@@ -4,11 +4,19 @@ on:
   pull_request:
     paths:
       - "backend/**"
+      - "data/智拓商机作战助手-开发版.html"
+      - "data/china-mobile-logo.svg"
+      - "scripts/**"
+      - "docker-compose.yml"
       - ".github/workflows/backend-ci.yml"
   push:
     branches: [main, develop]
     paths:
       - "backend/**"
+      - "data/智拓商机作战助手-开发版.html"
+      - "data/china-mobile-logo.svg"
+      - "scripts/**"
+      - "docker-compose.yml"
       - ".github/workflows/backend-ci.yml"
 
 jobs:
@@ -23,6 +31,14 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate frontend and Compose
+        working-directory: .
+        run: |
+          node scripts/check_frontend.mjs
+          docker compose config --quiet
       - name: Install dependencies
         run: pip install -e ".[dev]"
       - name: Lint

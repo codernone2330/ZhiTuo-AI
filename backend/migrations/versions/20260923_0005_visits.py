@@ -20,7 +20,12 @@ def upgrade() -> None:
         "visits",
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("external_id", sa.String(100), nullable=False),
-        sa.Column("customer_id", sa.Uuid(), sa.ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column(
+            "customer_id",
+            sa.Uuid(),
+            sa.ForeignKey("customers.id", ondelete="RESTRICT"),
+            nullable=False,
+        ),
         sa.Column("owner_user_id", sa.Uuid(), sa.ForeignKey("users.id", ondelete="SET NULL")),
         sa.Column("owner_name", sa.String(80), nullable=False),
         sa.Column("scheduled_at", sa.DateTime(timezone=True), nullable=False),
@@ -45,11 +50,26 @@ def upgrade() -> None:
         sa.Column("conflict_task_id", sa.String(100)),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("extra_data", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
     )
     for column in (
-        "external_id", "customer_id", "owner_user_id", "owner_name", "scheduled_at", "status"
+        "external_id",
+        "customer_id",
+        "owner_user_id",
+        "owner_name",
+        "scheduled_at",
+        "status",
     ):
         op.create_index(f"ix_visits_{column}", "visits", [column], unique=column == "external_id")
 

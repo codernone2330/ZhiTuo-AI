@@ -26,12 +26,24 @@ def upgrade() -> None:
         sa.Column("duplicate_rows", sa.Integer(), nullable=False),
         sa.Column("rejected_rows", sa.Integer(), nullable=False),
         sa.Column("status", sa.String(20), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["imported_by"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_customer_import_batches_imported_by", "customer_import_batches", ["imported_by"])
+    op.create_index(
+        "ix_customer_import_batches_imported_by", "customer_import_batches", ["imported_by"]
+    )
     op.create_index("ix_customer_import_batches_status", "customer_import_batches", ["status"])
     op.create_table(
         "customers",
@@ -64,9 +76,21 @@ def upgrade() -> None:
         sa.Column("imported_by", sa.Uuid(), nullable=False),
         sa.Column("source_created_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("extra_data", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["import_batch_id"], ["customer_import_batches.id"], ondelete="SET NULL"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["import_batch_id"], ["customer_import_batches.id"], ondelete="SET NULL"
+        ),
         sa.ForeignKeyConstraint(["imported_by"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], ondelete="SET NULL"),

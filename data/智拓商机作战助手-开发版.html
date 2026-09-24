@@ -627,8 +627,8 @@
     var USER_STORAGE_KEY="zhituo-local-users-v1";
     var DEEPSEEK_CONFIG_KEY="zhituo-deepseek-config-v1";
     var AI_CONFIG_KEY="zhituo-ai-model-config-v2";
-    var AI_API_BASE="http://127.0.0.1:8766";
-    var BACKEND_API_BASE=(location.protocol.indexOf("http")===0&&location.port==="8000"?location.origin:"http://127.0.0.1:8000")+"/api/v1";
+    // /app/ is served by the same API container, regardless of host or port.
+    var BACKEND_API_BASE=(location.protocol.indexOf("http")===0&&location.pathname.indexOf("/app/")===0?location.origin:"http://127.0.0.1:8000")+"/api/v1";
     var AI_MODELS=[
       {provider:"deepseek",providerName:"DeepSeek",id:"deepseek-v4-flash",label:"DeepSeek-V4-Flash（快速推荐）"},
       {provider:"deepseek",providerName:"DeepSeek",id:"deepseek-v4-pro",label:"DeepSeek-V4-Pro（深度推理）"},
@@ -1848,7 +1848,6 @@
     function deepseekModelLabel(model){return aiModelInfo(model).label;}
     function aiProviderName(provider){var match=AI_MODELS.find(function(item){return item.provider===provider;});return match?match.providerName:"AI 平台";}
     function aiModelOptionsHtml(selected){var groups=[],byProvider={};AI_MODELS.forEach(function(item){if(!byProvider[item.provider]){byProvider[item.provider]=[];groups.push(item.provider);}byProvider[item.provider].push(item);});return groups.map(function(provider){return '<optgroup label="'+esc(aiProviderName(provider))+'">'+byProvider[provider].map(function(item){return '<option value="'+esc(item.id)+'" '+(item.id===selected?"selected":"")+'>'+esc(item.label)+'</option>';}).join("")+'</optgroup>';}).join("");}
-    function deepseekApiUrl(){return AI_API_BASE+"/api/ai-chat";}
     var currentUser=loadUser();
     var deepseekConfig=loadDeepseekConfig();
     var deepseekTestDraft=null;
