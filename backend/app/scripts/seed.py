@@ -280,9 +280,7 @@ def seed_demo_users(session, password: str) -> int:
     """Create local demonstration identities without overwriting managed users."""
     if len(password) < 8:
         raise RuntimeError("BOOTSTRAP_DEMO_USER_PASSWORD must contain at least 8 characters")
-    organizations = {
-        item.code: item for item in session.scalars(select(Organization)).all()
-    }
+    organizations = {item.code: item for item in session.scalars(select(Organization)).all()}
     roles = {item.code: item for item in session.scalars(select(Role)).all()}
     created = 0
     for item in DEMO_USERS:
@@ -291,9 +289,7 @@ def seed_demo_users(session, password: str) -> int:
         organization = organizations.get(item.organization_code)
         role = roles.get(item.role_code)
         if organization is None or role is None:
-            raise RuntimeError(
-                f"Demo user {item.username} references missing organization or role"
-            )
+            raise RuntimeError(f"Demo user {item.username} references missing organization or role")
         user = User(
             username=item.username,
             employee_no=item.employee_no,
@@ -309,17 +305,15 @@ def seed_demo_users(session, password: str) -> int:
     return created
 
 
-def unify_local_user_passwords(session, password: str) -> int:
-    """Keep every local demonstration account on the agreed shared password."""
-    if len(password) < 8:
-        raise RuntimeError("The unified local password must contain at least 8 characters")
-    updated = 0
-    for user in session.scalars(select(User)).all():
-        if verify_password(password, user.password_hash):
-            continue
-        user.password_hash = hash_password(password)
-        updated += 1
-    return updated
+def reject_legacy_demo_passwords(session) -> None:
+    """Fail closed when a local database is reused for a shared deployment."""
+    known_defaults = ("szyd123456", "123456")
+    for user in session.scalars(select(User).where(User.is_active.is_(True))):
+        if any(verify_password(value, user.password_hash) for value in known_defaults):
+            raise RuntimeError(
+                "Active users still have a demonstration password. "
+                "Rotate credentials before sharing."
+            )
 
 
 def main() -> None:
@@ -330,7 +324,6 @@ def main() -> None:
         organization_count = seed_organizations(session)
         admin_created = seed_bootstrap_admin(session)
         demo_user_count = 0
-        password_sync_count = 0
         if (
             settings.app_env.lower() in {"local", "development", "test"}
             and settings.bootstrap_demo_users
@@ -339,14 +332,13 @@ def main() -> None:
             demo_user_count = seed_demo_users(
                 session, settings.bootstrap_demo_user_password.get_secret_value()
             )
-            password_sync_count = unify_local_user_passwords(
-                session, settings.bootstrap_demo_user_password.get_secret_value()
-            )
+            # Never reset managed accounts on restart; admins can rotate them before sharing.
+        if settings.app_env.lower() not in {"local", "development", "test"}:
+            reject_legacy_demo_passwords(session)
     print(
         f"Seed completed: {organization_count} organizations, {role_count} roles created, "
         f"bootstrap admin {'created' if admin_created else 'unchanged'}, "
-        f"{demo_user_count} demo users created, "
-        f"{password_sync_count} local passwords synchronized。"
+        f"{demo_user_count} demo users created。"
     )
 
 

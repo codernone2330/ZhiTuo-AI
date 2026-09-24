@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -39,6 +39,7 @@ def audit(
     action: str,
     target: str | None = None,
     detail: str | None = None,
+    trace_id: str | None = None,
 ):
     session.add(
         IntegrationAudit(
@@ -48,6 +49,7 @@ def audit(
             action=action,
             target_id=target,
             detail=detail,
+            trace_id=trace_id,
             created_at=datetime.now(timezone.utc),
         )
     )
@@ -152,6 +154,7 @@ def capture(payload: CaptureRequest, request: Request, identity: CurrentIdentity
         identity,
         "qcc_capture",
         detail=f"term={payload.searchTerm.strip()}; fetched={len(rows)}; queued={len(created)}",
+        trace_id=request.state.trace_id,
     )
     session.commit()
     return ok(request, {"fetched": len(rows), "queued": len(created), "items": created})
@@ -174,7 +177,7 @@ def leads(
         .offset((page - 1) * pageSize)
         .limit(pageSize)
     ).all()
-    total = len(session.scalars(statement).all())
+    total = session.scalar(select(func.count()).select_from(statement.subquery())) or 0
     return ok(
         request,
         PageData.build([_lead_data(row) for row in rows], page, pageSize, total).model_dump(),
@@ -250,6 +253,7 @@ def decide(
         "lead_approved" if payload.approve else "lead_rejected",
         str(lead.id),
         lead.review_reason,
+        request.state.trace_id,
     )
     session.commit()
     return ok(request, _lead_data(lead))
@@ -275,44 +279,74 @@ def chat(payload: ChatRequest, request: Request, identity: CurrentIdentity, sess
     key = payload.apiKey or (configured.get_secret_value() if configured else "")
     if len(key) < 12:
         raise AppError("AI.NOT_CONFIGURED", "请先配置所选 AI 平台的 API Key", 400)
-    authorized = session.scalars(_customer_statement(identity)).all()
-    customer_ids = {row.id for row in authorized}
-    visits = (
-        session.scalars(select(Visit).where(Visit.customer_id.in_(customer_ids))).all()
-        if customer_ids
-        else []
+    authorized_ids = _customer_statement(identity).with_only_columns(Customer.id).order_by(None)
+    customer_count = (
+        session.scalar(select(func.count()).select_from(authorized_ids.subquery())) or 0
     )
+    kind_counts = dict(
+        session.execute(
+            select(Customer.kind, func.count())
+            .where(Customer.id.in_(authorized_ids))
+            .group_by(Customer.kind)
+        ).all()
+    )
+    stages = dict(
+        session.execute(
+            select(Customer.stage, func.count())
+            .where(Customer.id.in_(authorized_ids))
+            .group_by(Customer.stage)
+        ).all()
+    )
+    visit_scope = select(Visit).where(Visit.customer_id.in_(authorized_ids))
     if "customer_manager" in identity.role_codes:
-        visits = [row for row in visits if row.owner_name == identity.user.display_name]
-    stages = {
-        stage: sum(row.stage == stage for row in authorized)
-        for stage in {row.stage for row in authorized}
-    }
+        visit_scope = visit_scope.where(Visit.owner_name == identity.user.display_name)
+    visit_ids = visit_scope.with_only_columns(Visit.id).order_by(None)
+    visit_totals = dict(
+        session.execute(
+            select(Visit.status, func.count()).where(Visit.id.in_(visit_ids)).group_by(Visit.status)
+        ).all()
+    )
+    deal_amount = session.scalar(
+        select(func.coalesce(func.sum(Visit.deal_amount), 0)).where(
+            Visit.id.in_(visit_ids), Visit.status == "completed"
+        )
+    )
     context = {
         "organization": identity.organization.name,
         "roleCodes": sorted(identity.role_codes),
-        "customerCount": len(authorized),
-        "newCustomerCount": sum(row.kind == "新客" for row in authorized),
-        "hunterCount": sum(row.kind == "猎户" for row in authorized),
+        "customerCount": customer_count,
+        "newCustomerCount": kind_counts.get("新客", 0),
+        "hunterCount": kind_counts.get("猎户", 0),
         "stages": stages,
-        "openVisits": sum(row.status == "pending" for row in visits),
-        "completedVisits": sum(row.status == "completed" for row in visits),
-        "dealAmount": str(
-            sum((row.deal_amount or 0 for row in visits if row.status == "completed"), 0)
-        ),
+        "openVisits": visit_totals.get("pending", 0),
+        "completedVisits": visit_totals.get("completed", 0),
+        "dealAmount": str(deal_amount or 0),
     }
     words = [
         word
         for word in payload.question.replace("，", " ").replace("？", " ").split()
         if len(word) >= 2
-    ]
-    ranked = sorted(
-        authorized,
-        key=lambda row: (
-            not any(word in (row.name + row.need + row.industry) for word in words),
-            -row.score,
-        ),
+    ][:8]
+    relevance = (
+        or_(
+            *[
+                or_(
+                    Customer.name.ilike(f"%{word}%"),
+                    Customer.need.ilike(f"%{word}%"),
+                    Customer.industry.ilike(f"%{word}%"),
+                )
+                for word in words
+            ]
+        )
+        if words
+        else None
     )
+    ranking = select(Customer).where(Customer.id.in_(authorized_ids))
+    if relevance is not None:
+        ranking = ranking.order_by(case((relevance, 0), else_=1), Customer.score.desc())
+    else:
+        ranking = ranking.order_by(Customer.score.desc())
+    ranked = session.scalars(ranking.limit(20)).all()
     context["relevantCustomers"] = [
         {
             "name": row.name,
@@ -321,19 +355,25 @@ def chat(payload: ChatRequest, request: Request, identity: CurrentIdentity, sess
             "stage": row.stage,
             "score": row.score,
         }
-        for row in ranked[:20]
+        for row in ranked
     ]
-    latest = sorted(visits, key=lambda row: row.completed_at or row.scheduled_at, reverse=True)[:20]
+    latest = session.execute(
+        select(Visit, Customer.name)
+        .join(Customer, Visit.customer_id == Customer.id)
+        .where(Visit.id.in_(visit_ids))
+        .order_by(Visit.created_at.desc())
+        .limit(20)
+    ).all()
     context["recentVisits"] = [
         {
-            "customer": next((c.name for c in authorized if c.id == row.customer_id), ""),
+            "customer": customer_name,
             "owner": row.owner_name,
             "status": row.status,
             "time": (row.completed_at or row.scheduled_at).isoformat(),
             "outcome": row.outcome,
             "dealAmount": str(row.deal_amount or 0),
         }
-        for row in latest
+        for row, customer_name in latest
     ]
     messages = [
         {
@@ -355,8 +395,9 @@ def chat(payload: ChatRequest, request: Request, identity: CurrentIdentity, sess
         "ai_chat",
         detail=(
             f"provider={payload.provider}; model={payload.model}; "
-            f"authorizedCustomers={len(authorized)}"
+            f"authorizedCustomers={customer_count}"
         ),
+        trace_id=request.state.trace_id,
     )
     session.commit()
     return ok(request, {**result, "provider": payload.provider, "model": payload.model})

@@ -1,0 +1,5 @@
+{$SHARED_HOST}:8443 {
+    tls internal
+    encode zstd gzip
+    reverse_proxy api:8000
+}

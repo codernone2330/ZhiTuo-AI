@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
@@ -73,3 +74,4 @@ class VisitImportRow(VisitCreate):
 
 class VisitImportRequest(BaseModel):
     rows: list[VisitImportRow] = Field(min_length=1, max_length=2000)
+    importBatchId: uuid.UUID | None = None

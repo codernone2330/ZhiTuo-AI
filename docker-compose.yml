@@ -29,8 +29,10 @@ services:
       QWEN_API_KEY: ${QWEN_API_KEY:-}
       GLM_API_KEY: ${GLM_API_KEY:-}
       KIMI_API_KEY: ${KIMI_API_KEY:-}
+      CLAMAV_HOST: ${CLAMAV_HOST:-}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
     ports:
-      - "127.0.0.1:8000:8000"
+      - "${API_BIND_ADDRESS:-127.0.0.1}:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy

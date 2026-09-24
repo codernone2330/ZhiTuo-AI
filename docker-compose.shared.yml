@@ -1,0 +1,32 @@
+# Optional same-LAN test entrypoint: docker compose -f docker-compose.yml -f docker-compose.shared.yml up -d --build
+# Keep API/PostgreSQL/Redis bound to loopback; publish only the TLS gateway.
+services:
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SHARED_HOST: ${SHARED_HOST:?Set SHARED_HOST to the server's LAN IP or DNS name}
+    ports:
+      - "${LAN_BIND_IP:?Set LAN_BIND_IP to the server's LAN IP}:8443:8443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --version >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+
+volumes:
+  caddy_data:
+  caddy_config:
+  clamav_data:

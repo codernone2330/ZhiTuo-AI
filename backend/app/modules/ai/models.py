@@ -41,4 +41,5 @@ class IntegrationAudit(Base):
     action: Mapped[str] = mapped_column(String(60), index=True)
     target_id: Mapped[str | None] = mapped_column(String(120))
     detail: Mapped[str | None] = mapped_column(String(500))
+    trace_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

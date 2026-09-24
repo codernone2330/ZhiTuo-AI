@@ -1,7 +1,8 @@
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 
 class Settings(BaseSettings):
@@ -36,6 +37,50 @@ class Settings(BaseSettings):
     qwen_api_key: SecretStr | None = None
     glm_api_key: SecretStr | None = None
     kimi_api_key: SecretStr | None = None
+    clamav_host: str | None = None
+    clamav_port: int = 3310
+
+    @model_validator(mode="after")
+    def reject_insecure_shared_configuration(self):
+        if self.app_env.lower() in {"local", "development", "test"}:
+            return self
+        secret = self.jwt_secret_key.get_secret_value()
+        if len(secret) < 32 or secret.startswith("REPLACE_") or secret in {
+            "local-development-only-change-me",
+            "please-change-this-before-shared-testing",
+        }:
+            raise ValueError("JWT_SECRET_KEY must be a unique secret of at least 32 characters")
+        database = make_url(self.database_url)
+        if (
+            database.get_backend_name() != "postgresql"
+            or not database.password
+            or len(database.password) < 16
+            or database.password == "zhituo_dev"
+            or database.password.startswith("REPLACE_")
+        ):
+            raise ValueError(
+                "Shared environments require PostgreSQL and a strong database password"
+            )
+        if self.debug or self.bootstrap_demo_users:
+            raise ValueError(
+                "DEBUG and BOOTSTRAP_DEMO_USERS must be false outside local development"
+            )
+        if self.bootstrap_admin_password and self.bootstrap_admin_password.get_secret_value():
+            raise ValueError("BOOTSTRAP_ADMIN_PASSWORD must be empty outside local development")
+        if (
+            self.bootstrap_demo_user_password
+            and self.bootstrap_demo_user_password.get_secret_value()
+        ):
+            raise ValueError("BOOTSTRAP_DEMO_USER_PASSWORD must be empty outside local development")
+        if not self.clamav_host:
+            raise ValueError(
+                "Shared environments require CLAMAV_HOST for fail-closed file scanning"
+            )
+        if not self.refresh_cookie_secure:
+            raise ValueError("Shared environments require HTTPS and REFRESH_COOKIE_SECURE=true")
+        if "*" in self.trusted_host_list or "*" in self.cors_origin_list:
+            raise ValueError("Shared environments must restrict trusted hosts and CORS")
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",

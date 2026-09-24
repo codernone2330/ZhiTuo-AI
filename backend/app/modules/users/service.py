@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.exceptions import AppError, CommonErrorCode
 from app.core.security import hash_password
 from app.modules.auth.dependencies import IdentityContext
@@ -11,6 +12,17 @@ from app.modules.auth.service import public_identity, role_codes
 from app.modules.organizations.models import Organization
 from app.modules.users.models import User
 from app.modules.users.schemas import UserCreate, UserUpdate
+
+
+def _require_shared_password(password: str) -> None:
+    if get_settings().app_env.lower() in {"local", "development", "test"}:
+        return
+    if len(password) < 12 or password in {"szyd123456", "123456"}:
+        raise AppError(
+            CommonErrorCode.INVALID_ARGUMENT,
+            "共享环境口令至少 12 位且不能使用演示口令",
+            400,
+        )
 
 
 def _target_organization(
@@ -135,6 +147,7 @@ def list_users(
 
 
 def create_user(session: Session, identity: IdentityContext, payload: UserCreate) -> User:
+    _require_shared_password(payload.password)
     organization = _target_organization(session, identity, payload.organizationId)
     role = _role(session, identity, payload.roleCode, organization)
     username = payload.username.strip()
@@ -197,6 +210,7 @@ def update_user(
     if payload.employeeNo is not None:
         user.employee_no = payload.employeeNo.strip()
     if payload.password is not None:
+        _require_shared_password(payload.password)
         user.password_hash = hash_password(payload.password)
     user.organization_id = organization.id
     if payload.isActive is not None:

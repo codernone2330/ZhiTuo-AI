@@ -5,13 +5,15 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, CommonErrorCode
 from app.db.session import get_db
 from app.modules.ai.models import IntegrationAudit
+from app.modules.audit.models import ApiAudit
 from app.modules.auth.dependencies import CurrentIdentity
+from app.modules.customers.models import Customer
 from app.modules.customers.service import _customer_statement
 from app.modules.organizations.models import Organization
 from app.modules.visits.models import Visit
@@ -65,6 +67,8 @@ def weekly(
     weekStart: date | None = None,
     organizationId: str | None = None,
     owner: str | None = None,
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(50, ge=1, le=200),
 ):
     statement = _customer_statement(identity)
     if organizationId:
@@ -79,16 +83,34 @@ def weekly(
         statement = statement.where(
             (Organization.path == org.path) | Organization.path.startswith(org.path + "/")
         )
-    customers = session.scalars(statement).all()
-    by_id = {row.id: row for row in customers}
-    visits = (
-        session.scalars(select(Visit).where(Visit.customer_id.in_(by_id))).all() if by_id else []
+    start, end = _week(weekStart or datetime.now(BUSINESS_TIMEZONE).date())
+    customer_ids = statement.with_only_columns(Customer.id).order_by(None)
+    periods = (
+        (start, end),
+        (start - timedelta(days=7), start),
+        (start - timedelta(days=364), end - timedelta(days=364)),
+    )
+    bounded = (
+        select(Visit, Customer)
+        .join(Customer, Visit.customer_id == Customer.id)
+        .where(
+            Visit.customer_id.in_(customer_ids),
+            Visit.status == "completed",
+            or_(
+                *[
+                    (Visit.completed_at >= period_start) & (Visit.completed_at < period_end)
+                    for period_start, period_end in periods
+                ]
+            ),
+        )
     )
     if "customer_manager" in identity.role_codes:
-        visits = [v for v in visits if v.owner_name == identity.user.display_name]
+        bounded = bounded.where(Visit.owner_name == identity.user.display_name)
     if owner:
-        visits = [v for v in visits if v.owner_name == owner]
-    start, end = _week(weekStart or datetime.now(BUSINESS_TIMEZONE).date())
+        bounded = bounded.where(Visit.owner_name == owner)
+    pairs = session.execute(bounded).all()
+    visits = [visit for visit, _ in pairs]
+    by_id = {customer.id: customer for _, customer in pairs}
     current = _metrics(visits, start, end)
     previous = _metrics(visits, start - timedelta(days=7), start)
     last_year = _metrics(visits, start - timedelta(days=364), end - timedelta(days=364))
@@ -121,6 +143,9 @@ def weekly(
     owner_rows = [
         {"owner": name, **_metrics(rows, start, end)} for name, rows in sorted(owners.items())
     ]
+    details.sort(key=lambda item: item["completedAt"], reverse=True)
+    details_total = len(details)
+    details = details[(page - 1) * pageSize : page * pageSize]
     comparisons = {
         key: {
             "current": current[key],
@@ -144,6 +169,9 @@ def weekly(
             "comparisons": comparisons,
             "owners": owner_rows,
             "details": details,
+            "detailsTotal": details_total,
+            "detailsPage": page,
+            "detailsPageSize": pageSize,
         },
         "traceId": request.state.trace_id,
     }
@@ -168,18 +196,47 @@ def report_audit(
     rows = session.scalars(
         statement.order_by(IntegrationAudit.created_at.desc()).limit(limit)
     ).all()
+    api_statement = select(ApiAudit)
+    if identity.is_super_admin or identity.is_group_admin:
+        pass
+    elif identity.is_org_admin:
+        api_statement = api_statement.join(
+            Organization, ApiAudit.organization_id == Organization.id
+        ).where(
+            (Organization.path == identity.organization.path)
+            | Organization.path.startswith(identity.organization.path + "/")
+        )
+    else:
+        api_statement = api_statement.where(ApiAudit.actor_id == identity.user.id)
+    api_rows = session.scalars(
+        api_statement.order_by(ApiAudit.created_at.desc()).limit(limit)
+    ).all()
+    combined = [
+        {
+            "id": str(row.id),
+            "action": row.action,
+            "targetId": row.target_id,
+            "detail": row.detail,
+            "createdAt": row.created_at.isoformat(),
+            "actorId": str(row.actor_id),
+            "traceId": row.trace_id,
+        }
+        for row in rows
+    ] + [
+        {
+            "id": str(row.id),
+            "action": row.action,
+            "targetId": row.path,
+            "detail": f"{row.method} HTTP {row.status_code} · trace={row.trace_id}",
+            "createdAt": row.created_at.isoformat(),
+            "actorId": str(row.actor_id) if row.actor_id else None,
+            "traceId": row.trace_id,
+        }
+        for row in api_rows
+    ]
+    combined.sort(key=lambda row: row["createdAt"], reverse=True)
     return {
         "success": True,
-        "data": [
-            {
-                "id": str(row.id),
-                "action": row.action,
-                "targetId": row.target_id,
-                "detail": row.detail,
-                "createdAt": row.created_at.isoformat(),
-                "actorId": str(row.actor_id),
-            }
-            for row in rows
-        ],
+        "data": combined[:limit],
         "traceId": request.state.trace_id,
     }

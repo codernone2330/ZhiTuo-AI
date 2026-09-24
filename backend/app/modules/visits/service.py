@@ -427,6 +427,7 @@ def import_visits(session: Session, identity: IdentityContext, payload: VisitImp
                 "aiStructured": row.aiStructured,
                 "simulated": row.simulated,
                 "scoreSnapshotProvenance": "legacy_import_unavailable",
+                "demoImportBatchId": str(payload.importBatchId) if payload.importBatchId else None,
             },
         )
         if row.createdAt:

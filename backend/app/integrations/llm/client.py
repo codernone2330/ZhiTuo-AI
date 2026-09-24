@@ -46,10 +46,18 @@ def ask_provider(provider: str, model: str, api_key: str, messages: list[dict]) 
             "usage": result.get("usage") or {},
         }
     except error.HTTPError as exc:
+        if exc.code == 400:
+            raise AppError("AI.REQUEST_REJECTED", "AI 平台拒绝请求，请检查模型和参数", 502) from exc
         if exc.code in (401, 403):
             raise AppError("AI.AUTH_FAILED", "AI 平台密钥无效或无模型权限", 502) from exc
+        if exc.code == 402:
+            raise AppError("AI.INSUFFICIENT_BALANCE", "AI 平台账户余额不足", 502) from exc
         if exc.code == 404:
             raise AppError("AI.MODEL_NOT_FOUND", "所选模型在平台上不可用，请检查型号", 502) from exc
+        if exc.code == 429:
+            raise AppError("AI.RATE_LIMITED", "AI 平台请求过于频繁，请稍后重试", 503) from exc
+        if exc.code >= 500:
+            raise AppError("AI.UPSTREAM_UNAVAILABLE", "AI 平台暂不可用，请稍后重试", 503) from exc
         raise AppError("AI.PROVIDER_ERROR", f"AI 平台返回 HTTP {exc.code}", 502) from exc
     except (
         error.URLError,
