@@ -323,7 +323,7 @@ def test_ownership_requires_direct_supervisor_and_survives_reload(identity_clien
     assert reviewed.json()["data"]["status"] == "approved"
     detail = client.get("/api/v1/customers/c-approval", headers=group_headers)
     assert detail.json()["data"]["ownerName"] == "新负责人"
-    assert {event["action"] for event in detail.json()["data"]["auditEvents"]} == {
+    assert {event["action"] for event in detail.json()["data"]["auditEvents"]} >= {
         "ownership_requested", "ownership_approved"
     }
     assert detail.json()["data"]["extraData"]["crmFlow"][-1]["toLabel"] == "新负责人"
@@ -398,7 +398,7 @@ def test_crm_edit_and_ownership_request_are_atomic(identity_client) -> None:
     unchanged = client.get("/api/v1/customers/c-atomic", headers=headers).json()["data"]
     assert unchanged["name"] == original["name"]
     assert unchanged["version"] == original["version"]
-    assert unchanged["auditEvents"] == []
+    assert {event["action"] for event in unchanged["auditEvents"]} == {"score_baseline"}
     assert client.get("/api/v1/customers/requests", headers=headers).json()["data"] == []
 
     edit["ownershipRequest"]["targetOwnerName"] = "新负责人"
@@ -411,9 +411,51 @@ def test_crm_edit_and_ownership_request_are_atomic(identity_client) -> None:
     assert detail["extraData"]["stageHistory"][0]["operator"] == "测试集团管理员"
     assert detail["score"] != 99
     assert detail["extraData"]["reasons"] != ["伪造评分原因"]
-    assert {event["action"] for event in detail["auditEvents"]} == {
+    assert {event["action"] for event in detail["auditEvents"]} >= {
         "customer_edited", "stage_changed", "ownership_requested"
     }
     requests = client.get("/api/v1/customers/requests", headers=headers).json()["data"]
     assert len(requests) == 1
     assert requests[0]["status"] == "pending"
+
+
+def test_approved_cross_district_transfer_updates_recommendation_reason(identity_client) -> None:
+    client, testing_session = identity_client
+    group_headers = {
+        "Authorization": f"Bearer {login(client, 'groupadmin', 'test-admin-password')}"
+    }
+    super_headers = {"Authorization": f"Bearer {login(client, 'szyd', 'test-super-password')}"}
+    with testing_session() as session:
+        source = session.scalar(
+            select(Organization).where(Organization.code == "cmcc-gd-sz-ft-enterprise")
+        )
+        target = session.scalar(
+            select(Organization).where(Organization.code == "cmcc-gd-sz-ns-enterprise")
+        )
+    imported = client.post(
+        "/api/v1/customers/import", headers=group_headers,
+        json={"rows": [_row(str(source.id), "c-cross-district", "跨区流转企业有限公司")]},
+    )
+    assert imported.status_code == 201, imported.text
+    created = client.post(
+        "/api/v1/customers/c-cross-district/requests", headers=group_headers,
+        json={
+            "kind": "ownership", "reason": "客户经营归属调整到南山",
+            "targetOrganizationId": str(target.id), "targetOwnerName": "南山经理",
+        },
+    )
+    assert created.status_code == 201, created.text
+    approved = client.post(
+        f"/api/v1/customers/requests/{created.json()['data']['id']}/decision",
+        headers=super_headers, json={"approve": True, "comment": "同意调整"},
+    )
+    assert approved.status_code == 200, approved.text
+    opportunity = client.get(
+        "/api/v1/opportunities/c-cross-district", headers=group_headers
+    ).json()["data"]
+    assert opportunity["organizationId"] == str(target.id)
+    assert any("南山" in reason for reason in opportunity["reasons"])
+    journey = client.get(
+        "/api/v1/customers/c-cross-district/journey", headers=group_headers
+    ).json()["data"]
+    assert journey["scoreLog"][0]["trigger"].startswith("归属审批通过")

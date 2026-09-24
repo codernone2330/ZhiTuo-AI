@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.responses import PageData
 from app.db.session import get_db
 from app.modules.auth.dependencies import CurrentIdentity
+from app.modules.customers.journey import get_customer_journey
 from app.modules.customers.requests import create_request, decide_request, list_requests
 from app.modules.customers.schemas import (
     CustomerImportRequest,
@@ -91,6 +92,13 @@ def customer_request_create(
     session: DbSession,
 ) -> dict:
     return _success(request, create_request(session, identity, customer_ref, payload))
+
+
+@router.get("/{customer_ref}/journey")
+def customer_journey(
+    customer_ref: str, request: Request, identity: CurrentIdentity, session: DbSession
+) -> dict:
+    return _success(request, get_customer_journey(session, identity, customer_ref))
 
 
 @router.get("/{customer_ref}")

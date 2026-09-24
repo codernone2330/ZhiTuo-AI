@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, CommonErrorCode
 from app.modules.auth.dependencies import IdentityContext
-from app.modules.customers.audit import record_customer_event
+from app.modules.customers.audit import record_customer_event, record_score_event
 from app.modules.customers.models import Customer, CustomerRequest
 from app.modules.customers.schemas import CustomerRequestCreate, CustomerRequestDecision
 from app.modules.customers.service import (
@@ -202,6 +202,8 @@ def decide_request(
     }
     if payload.approve:
         if request.kind == "ownership":
+            from app.modules.opportunities.service import _reasons, _score
+
             after = request.after_data or {}
             target = session.get(Organization, uuid.UUID(after["organizationId"]))
             if target is None or not target.is_active:
@@ -215,6 +217,8 @@ def decide_request(
                 )
             )
             extra = dict(customer.extra_data or {})
+            old_score = customer.score
+            old_reasons = list(extra.get("reasons") or [])
             flow = list(extra.get("crmFlow") or [])
             flow.append({
                 "id": f"crm-approved-{request.id}",
@@ -249,6 +253,14 @@ def decide_request(
             customer.province = target.province
             customer.city = target.city
             customer.district = target.district
+            customer.score = _score(customer)
+            customer.extra_data = {
+                **extra, "reasons": _reasons(customer, target),
+            }
+            record_score_event(
+                session, customer, identity.user, old_score, old_reasons,
+                f"归属审批通过：{request.id}", at=now,
+            )
             customer.version += 1
         elif request.kind == "delete":
             customer.deleted_at = now

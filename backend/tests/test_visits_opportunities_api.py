@@ -71,6 +71,82 @@ def test_opportunity_is_derived_from_authorized_customer(identity_client):
     assert detail.json()["data"]["score"] == refreshed.json()["data"]["top"][0]["score"]
 
 
+def test_score_visit_result_deal_journey_stays_readable_after_conversion(identity_client):
+    client, testing_session = identity_client
+    headers = _headers(client)
+    ref, department = _customer(client, testing_session, headers, ref="c-journey-test")
+
+    initial = client.get(f"/api/v1/customers/{ref}/journey", headers=headers)
+    assert initial.status_code == 200, initial.text
+    assert initial.json()["data"]["scoreLog"][0]["toScore"] == 73
+    assert initial.json()["data"]["scoreLog"][0]["provenance"] == "import_baseline"
+
+    refreshed = client.post(
+        f"/api/v1/opportunities/refresh?organizationId={department.id}", headers=headers
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    score = refreshed.json()["data"]["top"][0]["score"]
+    journey = client.get(f"/api/v1/customers/{ref}/journey", headers=headers).json()["data"]
+    assert journey["currentScore"] == score
+    assert journey["scoreLog"][0]["toScore"] == score
+    assert journey["scoreLog"][0]["trigger"] == "商机评分刷新"
+    second_refresh = client.post(
+        f"/api/v1/opportunities/refresh?organizationId={department.id}", headers=headers
+    )
+    assert second_refresh.json()["data"]["changed"] == 0
+    assert len(client.get(
+        f"/api/v1/customers/{ref}/journey", headers=headers
+    ).json()["data"]["scoreLog"]) == len(journey["scoreLog"])
+
+    created = client.post(
+        "/api/v1/visits", headers=headers,
+        json=_visit_payload(ref, source="推荐商机一键生成"),
+    )
+    assert created.status_code == 201, created.text
+    task = created.json()["data"]
+    assert task["opportunityScoreAtPlan"] == score
+    assert task["opportunityScoreEventIdAtPlan"] == journey["scoreLog"][0]["id"]
+    assert task["scoreSnapshotProvenance"] == "server_plan_snapshot"
+    assert task["opportunityReasonsAtPlan"]
+
+    completed = client.post(
+        f"/api/v1/visits/{task['id']}/complete", headers=headers,
+        json={
+            "version": task["version"], "outcome": "已达成合作", "stage": "已成交",
+            "notes": "客户确认采购企业专线", "nextAction": "安排交付",
+            "dealProduct": "企业专线", "dealAmount": "120000.00",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert client.get(f"/api/v1/opportunities/{ref}", headers=headers).status_code == 404
+
+    journey_response = client.get(f"/api/v1/customers/{ref}/journey", headers=headers)
+    assert journey_response.status_code == 200, journey_response.text
+    journey = journey_response.json()["data"]
+    assert journey["currentStage"] == "已成交"
+    assert journey["summary"] == {
+        "plannedVisits": 0, "completedVisits": 1, "canceledVisits": 0,
+        "dealCount": 1, "dealAmount": "120000.00",
+    }
+    assert journey["visits"][0]["opportunityScoreAtPlan"] == score
+    assert journey["visits"][0]["outcome"] == "已达成合作"
+    assert journey["deals"][0]["visitId"] == task["id"]
+    assert journey["deals"][0]["amount"] == "120000.00"
+    assert {event["action"] for event in journey["events"]} >= {
+        "score_baseline", "score_updated", "visit_planned", "visit_completed", "deal_recorded"
+    }
+    duplicate = client.post(
+        f"/api/v1/visits/{task['id']}/complete", headers=headers,
+        json={
+            "version": task["version"], "outcome": "已达成合作", "stage": "已成交",
+            "notes": "重复回填", "dealProduct": "企业专线", "dealAmount": "120000.00",
+        },
+    )
+    assert duplicate.status_code == 409
+    again = client.get(f"/api/v1/customers/{ref}/journey", headers=headers).json()["data"]
+    assert again["summary"]["dealCount"] == 1
+
+
 def test_visit_create_duplicate_override_edit_cancel_and_reload(identity_client):
     client, testing_session = identity_client
     headers = _headers(client)
@@ -152,7 +228,7 @@ def test_visit_completion_updates_customer_and_deal_atomically(identity_client):
     assert customer["stage"] == "已成交"
     assert customer["extraData"]["lastContact"]
     assert customer["extraData"]["stageHistory"][-1]["source"] == "拜访结果回填"
-    assert customer["auditEvents"][0]["action"] == "stage_changed"
+    assert "stage_changed" in {event["action"] for event in customer["auditEvents"]}
     assert "近期已有互动" in customer["extraData"]["reasons"][-1]
     assert client.get("/api/v1/opportunities", headers=headers).json()["data"]["total"] == 0
     again = client.post(
@@ -181,6 +257,9 @@ def test_visit_import_is_idempotent(identity_client):
     assert first.json()["data"]["inserted"] == 1
     assert second.status_code == 201
     assert second.json()["data"]["duplicates"] == 1
+    imported = client.get("/api/v1/visits/legacy-visit-1", headers=headers).json()["data"]
+    assert imported["opportunityScoreAtPlan"] is None
+    assert imported["scoreSnapshotProvenance"] == "legacy_import_unavailable"
 
 
 def test_department_customer_manager_sees_only_own_tasks_and_cannot_edit_other_owner(
@@ -224,6 +303,9 @@ def test_org_scope_blocks_sibling_opportunity_refresh(identity_client):
     with testing_session() as session:
         shenzhen = session.scalar(select(Organization).where(Organization.code == "cmcc-gd-sz"))
         guangzhou = session.scalar(select(Organization).where(Organization.code == "cmcc-gd-gz"))
+        guangzhou_department = session.scalar(
+            select(Organization).where(Organization.code == "cmcc-gd-gz-th-enterprise")
+        )
     created = client.post(
         "/api/v1/users",
         headers=super_headers,
@@ -242,3 +324,13 @@ def test_org_scope_blocks_sibling_opportunity_refresh(identity_client):
         f"/api/v1/opportunities/refresh?organizationId={guangzhou.id}", headers=headers
     )
     assert response.status_code == 403
+    imported = client.post(
+        "/api/v1/customers/import", headers=super_headers,
+        json={"rows": [{
+            "externalId": "gz-private-journey", "name": "广州权限测试企业有限公司",
+            "organizationId": str(guangzhou_department.id), "ownerName": "广州经理",
+        }]},
+    )
+    assert imported.status_code == 201, imported.text
+    hidden = client.get("/api/v1/customers/gz-private-journey/journey", headers=headers)
+    assert hidden.status_code == 404

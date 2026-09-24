@@ -33,6 +33,34 @@ def record_customer_event(
     return event
 
 
+def record_score_event(
+    session: Session,
+    customer: Customer,
+    actor: User,
+    before_score: int | None,
+    before_reasons: list[str] | None,
+    trigger: str,
+    at: datetime | None = None,
+) -> CustomerEvent | None:
+    after_reasons = list((customer.extra_data or {}).get("reasons") or [])
+    if before_score == customer.score and (before_reasons or []) == after_reasons:
+        return None
+    return record_customer_event(
+        session, customer, actor,
+        "score_baseline" if before_score is None else "score_updated",
+        {} if before_score is None else {
+            "score": before_score, "reasons": before_reasons or [],
+        },
+        {
+            "score": customer.score, "reasons": after_reasons, "trigger": trigger,
+            "provenance": "import_baseline" if before_score is None else "server_change",
+            "ruleVersion": "imported_unverified" if before_score is None else "rule_v1",
+        },
+        trigger,
+        at=at,
+    )
+
+
 def customer_timeline(session: Session, customer: Customer) -> list[dict]:
     events = session.scalars(
         select(CustomerEvent)

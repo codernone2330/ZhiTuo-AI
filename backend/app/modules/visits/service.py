@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, CommonErrorCode
 from app.modules.auth.dependencies import IdentityContext
-from app.modules.customers.audit import record_customer_event
-from app.modules.customers.models import Customer
+from app.modules.customers.audit import record_customer_event, record_score_event
+from app.modules.customers.models import Customer, CustomerEvent
 from app.modules.customers.service import _scope_condition
 from app.modules.opportunities.service import _reasons, _score
 from app.modules.organizations.models import Organization
@@ -131,6 +131,11 @@ def serialize_visit(task: Visit, customer: Customer) -> dict:
         "version": task.version,
         "aiStructured": extra.get("aiStructured"),
         "simulated": bool(extra.get("simulated")),
+        "opportunityScoreAtPlan": extra.get("opportunityScoreAtPlan"),
+        "opportunityReasonsAtPlan": extra.get("opportunityReasonsAtPlan") or [],
+        "opportunityStageAtPlan": extra.get("opportunityStageAtPlan"),
+        "opportunityScoreEventIdAtPlan": extra.get("opportunityScoreEventIdAtPlan"),
+        "scoreSnapshotProvenance": extra.get("scoreSnapshotProvenance"),
     }
 
 
@@ -171,6 +176,15 @@ def create_visit(session: Session, identity: IdentityContext, payload: VisitCrea
             "该客户已有未完成任务，重复创建需填写至少 5 字原因",
             409,
         )
+    score_event = session.scalar(
+        select(CustomerEvent)
+        .where(
+            CustomerEvent.customer_id == customer.id,
+            CustomerEvent.action.in_(("score_baseline", "score_updated")),
+        )
+        .order_by(CustomerEvent.created_at.desc(), CustomerEvent.id.desc())
+        .limit(1)
+    )
     task = Visit(
         external_id=f"v-{uuid.uuid4().hex[:16]}",
         customer_id=customer.id,
@@ -187,11 +201,30 @@ def create_visit(session: Session, identity: IdentityContext, payload: VisitCrea
         override_reason=payload.overrideReason.strip() or None,
         conflict_task_id=conflict.external_id if conflict else None,
         deal_amount=Decimal("0"),
-        extra_data={},
+        extra_data={
+            "opportunityScoreAtPlan": customer.score,
+            "opportunityReasonsAtPlan": list(
+                (customer.extra_data or {}).get("reasons")
+                or _reasons(customer, session.get(Organization, customer.organization_id))
+            ),
+            "opportunityStageAtPlan": customer.stage,
+            "opportunityScoreEventIdAtPlan": str(score_event.id) if score_event else None,
+            "scoreSnapshotProvenance": "server_plan_snapshot",
+        },
     )
     customer.next_action = payload.purpose.strip()
     customer.version += 1
     session.add(task)
+    record_customer_event(
+        session, customer, identity.user, "visit_planned", {},
+        {
+            "visitId": task.external_id, "time": task.scheduled_at.isoformat(),
+            "owner": task.owner_name, "purpose": task.purpose,
+            "opportunityScoreAtPlan": customer.score,
+            "opportunityScoreEventIdAtPlan": str(score_event.id) if score_event else None,
+        },
+        task.source,
+    )
     session.commit()
     session.refresh(task)
     return serialize_visit(task, customer)
@@ -204,6 +237,10 @@ def update_visit(
     task = _task(session, identity, ref, lock=True)
     _open(task, payload.version)
     customer = session.get(Customer, task.customer_id)
+    before = {
+        "visitId": task.external_id, "time": task.scheduled_at.isoformat(),
+        "owner": task.owner_name, "purpose": task.purpose,
+    }
     task.owner_user_id = _owner(session, identity, customer, payload.ownerName)
     task.owner_name = payload.ownerName
     task.scheduled_at = _future(payload.time)
@@ -214,6 +251,14 @@ def update_visit(
     task.version += 1
     customer.next_action = task.purpose
     customer.version += 1
+    record_customer_event(
+        session, customer, identity.user, "visit_updated", before,
+        {
+            "visitId": task.external_id, "time": task.scheduled_at.isoformat(),
+            "owner": task.owner_name, "purpose": task.purpose,
+        },
+        "拜访计划调整",
+    )
     session.commit()
     session.refresh(task)
     return serialize_visit(task, customer)
@@ -230,6 +275,12 @@ def cancel_visit(
     task.canceled_by = identity.user.display_name
     task.cancel_reason = payload.reason.strip()
     task.version += 1
+    record_customer_event(
+        session, session.get(Customer, task.customer_id), identity.user,
+        "visit_canceled", {"visitId": task.external_id, "status": "pending"},
+        {"visitId": task.external_id, "status": "canceled"},
+        task.cancel_reason, at=task.canceled_at,
+    )
     session.commit()
     session.refresh(task)
     return serialize_visit(task, session.get(Customer, task.customer_id))
@@ -246,6 +297,8 @@ def complete_visit(
     is_deal = payload.outcome == "已达成合作" or payload.stage == "已成交"
     stage = "已成交" if is_deal else payload.stage
     old_stage = customer.stage
+    old_score = customer.score
+    old_reasons = list((customer.extra_data or {}).get("reasons") or [])
     task.status = "completed"
     task.completed_at = now
     task.outcome = "已达成合作" if is_deal else payload.outcome
@@ -294,6 +347,29 @@ def complete_visit(
             {"stage": old_stage}, {"stage": customer.stage},
             f"拜访结果回填：{task.external_id}", at=now,
         )
+    record_customer_event(
+        session, customer, identity.user, "visit_completed",
+        {"visitId": task.external_id, "status": "pending"},
+        {
+            "visitId": task.external_id, "status": "completed",
+            "outcome": task.outcome, "stage": customer.stage,
+            "notes": task.notes,
+        },
+        task.outcome, at=now,
+    )
+    if is_deal:
+        record_customer_event(
+            session, customer, identity.user, "deal_recorded", {},
+            {
+                "visitId": task.external_id, "product": task.deal_product,
+                "amount": str(task.deal_amount), "remark": task.deal_remark,
+            },
+            "拜访结果确认成交", at=now,
+        )
+    record_score_event(
+        session, customer, identity.user, old_score, old_reasons,
+        f"拜访结果回填：{task.external_id}", at=now,
+    )
     session.commit()
     session.refresh(task)
     return {"visit": serialize_visit(task, customer), "customerVersion": customer.version}
@@ -347,7 +423,11 @@ def import_visits(session: Session, identity: IdentityContext, payload: VisitImp
             deal_amount=row.dealAmount,
             deal_remark=row.dealRemark,
             override_reason=row.overrideReason,
-            extra_data={"aiStructured": row.aiStructured, "simulated": row.simulated},
+            extra_data={
+                "aiStructured": row.aiStructured,
+                "simulated": row.simulated,
+                "scoreSnapshotProvenance": "legacy_import_unavailable",
+            },
         )
         if row.createdAt:
             task.created_at = row.createdAt

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, CommonErrorCode
 from app.modules.auth.dependencies import IdentityContext
+from app.modules.customers.audit import record_score_event
 from app.modules.customers.models import Customer
 from app.modules.customers.service import _customer_statement
 from app.modules.organizations.models import Organization
@@ -75,9 +76,10 @@ def _score(customer: Customer) -> int:
 def _reasons(customer: Customer, organization: Organization) -> list[str]:
     last = _last_contact(customer)
     stale = last is None or (datetime.now(timezone.utc) - last).days > 7
+    org_label = f"{organization.city or ''}{organization.district or ''}{organization.name}"
     return [
         "新客待核验与首触" if customer.kind == "新客" else "异网猎户待转化",
-        f"归属{organization.name}，行业为{customer.industry}",
+        f"归属{org_label}，行业为{customer.industry}",
         f"需求方向：{customer.need or '待识别'}",
         "超过 7 天未跟进，建议尽快触达" if stale else "近期已有互动，建议推进下一阶段",
     ]
@@ -172,10 +174,16 @@ def refresh_opportunities(
         reasons = _reasons(customer, orgs[customer.organization_id])
         extra = dict(customer.extra_data or {})
         if customer.score != score or extra.get("reasons") != reasons:
+            before_score = customer.score
+            before_reasons = list(extra.get("reasons") or [])
             customer.score = score
             extra["reasons"] = reasons
             customer.extra_data = extra
             customer.version += 1
+            record_score_event(
+                session, customer, identity.user, before_score, before_reasons,
+                "商机评分刷新",
+            )
             changed += 1
     session.commit()
     ranked = sorted(customers, key=lambda item: item.score, reverse=True)

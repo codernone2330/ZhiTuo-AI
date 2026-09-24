@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, CommonErrorCode
 from app.modules.auth.dependencies import IdentityContext
-from app.modules.customers.audit import customer_timeline, record_customer_event
+from app.modules.customers.audit import (
+    customer_timeline,
+    record_customer_event,
+    record_score_event,
+)
 from app.modules.customers.models import Customer, CustomerImportBatch
 from app.modules.customers.schemas import CustomerImportRequest, CustomerImportRow, CustomerUpdate
 from app.modules.organizations.models import Organization
@@ -192,6 +196,7 @@ def update_customer(
         "isKeyAccount": customer.is_key_account,
     }
     old_stage = customer.stage
+    old_reasons = list((customer.extra_data or {}).get("reasons") or [])
     now = datetime.now(timezone.utc)
     extra_data = dict(customer.extra_data or {})
     if payload.stage != old_stage:
@@ -248,6 +253,10 @@ def update_customer(
         record_customer_event(session, customer, identity.user, "stage_changed",
                               {"stage": old_stage}, {"stage": customer.stage},
                               payload.stageReason.strip(), at=now)
+    record_score_event(
+        session, customer, identity.user, before["score"], old_reasons,
+        "CRM 客户资料编辑", at=now,
+    )
     if payload.ownershipRequest:
         from app.modules.customers.requests import create_request
         from app.modules.customers.schemas import CustomerRequestCreate
@@ -368,6 +377,10 @@ def import_customers(
             )
             session.add(customer)
             session.flush()
+            record_score_event(
+                session, customer, identity.user, None, None,
+                f"客户导入：{payload.sourceName}",
+            )
             inserted += 1
         except AppError:
             raise
