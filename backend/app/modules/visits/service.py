@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, CommonErrorCode
 from app.modules.auth.dependencies import IdentityContext
+from app.modules.customers.audit import record_customer_event
 from app.modules.customers.models import Customer
 from app.modules.customers.service import _scope_condition
 from app.modules.opportunities.service import _reasons, _score
@@ -244,6 +245,7 @@ def complete_visit(
     now = datetime.now(timezone.utc)
     is_deal = payload.outcome == "已达成合作" or payload.stage == "已成交"
     stage = "已成交" if is_deal else payload.stage
+    old_stage = customer.stage
     task.status = "completed"
     task.completed_at = now
     task.outcome = "已达成合作" if is_deal else payload.outcome
@@ -286,6 +288,12 @@ def complete_visit(
         "reasons": _reasons(customer, session.get(Organization, customer.organization_id)),
     }
     customer.version += 1
+    if old_stage != customer.stage:
+        record_customer_event(
+            session, customer, identity.user, "stage_changed",
+            {"stage": old_stage}, {"stage": customer.stage},
+            f"拜访结果回填：{task.external_id}", at=now,
+        )
     session.commit()
     session.refresh(task)
     return {"visit": serialize_visit(task, customer), "customerVersion": customer.version}

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, CommonErrorCode
 from app.modules.auth.dependencies import IdentityContext
+from app.modules.customers.audit import record_customer_event
 from app.modules.customers.models import Customer, CustomerRequest
 from app.modules.customers.schemas import CustomerRequestCreate, CustomerRequestDecision
 from app.modules.customers.service import (
@@ -85,6 +86,9 @@ def create_request(
     identity: IdentityContext,
     customer_ref: str,
     payload: CustomerRequestCreate,
+    *,
+    customer: Customer | None = None,
+    commit: bool = True,
 ) -> dict:
     if not (
         identity.is_super_admin
@@ -94,7 +98,7 @@ def create_request(
         or "customer_manager" in identity.role_codes
     ):
         raise AppError(CommonErrorCode.FORBIDDEN, "当前角色不能申请客户变更", 403)
-    customer = _customer_for_request(session, identity, customer_ref)
+    customer = customer or _customer_for_request(session, identity, customer_ref)
     pending = session.scalar(
         select(CustomerRequest.id).where(
             CustomerRequest.customer_id == customer.id,
@@ -135,8 +139,14 @@ def create_request(
         after_data=after,
     )
     session.add(request)
-    session.commit()
-    session.refresh(request)
+    session.flush()
+    record_customer_event(
+        session, customer, identity.user, f"{payload.kind}_requested",
+        request.before_data, request.after_data, request.reason, request.id,
+    )
+    if commit:
+        session.commit()
+        session.refresh(request)
     return serialize_request(session, request)
 
 
@@ -179,12 +189,17 @@ def decide_request(
     if customer is None or customer.deleted_at is not None:
         raise AppError(CommonErrorCode.CONFLICT, "客户已不存在", 409)
     before = request.before_data or {}
-    if (
+    if payload.approve and (
         str(customer.organization_id) != before.get("organizationId")
         or customer.owner_name != before.get("ownerName")
     ):
         raise AppError(CommonErrorCode.CONFLICT, "客户归属已变化，请驳回后重新申请", 409)
     now = datetime.now(timezone.utc)
+    decision_before = {
+        "organizationId": str(customer.organization_id),
+        "ownerName": customer.owner_name,
+        "deleted": customer.deleted_at is not None,
+    }
     if payload.approve:
         if request.kind == "ownership":
             after = request.after_data or {}
@@ -242,6 +257,17 @@ def decide_request(
     request.reviewer_id = identity.user.id
     request.reviewed_at = now
     request.review_comment = payload.comment.strip() or "审核通过"
+    record_customer_event(
+        session, customer, identity.user,
+        f"{request.kind}_{request.status}",
+        decision_before,
+        {
+            "organizationId": str(customer.organization_id),
+            "ownerName": customer.owner_name,
+            "deleted": customer.deleted_at is not None,
+        },
+        request.review_comment, request.id, now,
+    )
     session.commit()
     session.refresh(request)
     return serialize_request(session, request)

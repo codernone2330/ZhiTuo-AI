@@ -96,3 +96,25 @@ class CustomerRequest(TimestampMixin, Base):
     )
     review_comment: Mapped[str | None] = mapped_column(String(300))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CustomerEvent(Base):
+    """Append-only audit trail for server-side CRM writes."""
+
+    __tablename__ = "customer_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("customers.id", ondelete="RESTRICT"), index=True
+    )
+    actor_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    request_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("customer_requests.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    action: Mapped[str] = mapped_column(String(40), index=True)
+    before_data: Mapped[dict] = mapped_column(JSON, default=dict)
+    after_data: Mapped[dict] = mapped_column(JSON, default=dict)
+    reason: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

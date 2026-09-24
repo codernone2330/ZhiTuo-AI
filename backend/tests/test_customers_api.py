@@ -223,12 +223,19 @@ def test_customer_edit_persists_and_rejects_stale_version(identity_client) -> No
         "isKeyAccount": "否",
         "stageHistory": [{"toStage": "已联系"}],
         "reasons": ["测试更新"],
+        "stageReason": "客户已通过电话联系",
     }
     updated = client.patch("/api/v1/customers/c-edit", headers=headers, json=payload)
     assert updated.status_code == 200, updated.text
     assert updated.json()["data"]["version"] == original["version"] + 1
     reloaded = client.get("/api/v1/customers/c-edit", headers=headers).json()["data"]
     assert reloaded["name"] == payload["name"]
+    assert reloaded["extraData"]["stageHistory"][-1]["operator"] == "测试集团管理员"
+    assert reloaded["extraData"]["stageHistory"][-1]["fromStage"] == "线索入池"
+    assert reloaded["extraData"]["reasons"] != payload["reasons"]
+    assert {event["action"] for event in reloaded["auditEvents"]} >= {
+        "customer_edited", "stage_changed"
+    }
     stale = client.patch("/api/v1/customers/c-edit", headers=headers, json=payload)
     assert stale.status_code == 409
 
@@ -316,6 +323,10 @@ def test_ownership_requires_direct_supervisor_and_survives_reload(identity_clien
     assert reviewed.json()["data"]["status"] == "approved"
     detail = client.get("/api/v1/customers/c-approval", headers=group_headers)
     assert detail.json()["data"]["ownerName"] == "新负责人"
+    assert {event["action"] for event in detail.json()["data"]["auditEvents"]} == {
+        "ownership_requested", "ownership_approved"
+    }
+    assert detail.json()["data"]["extraData"]["crmFlow"][-1]["toLabel"] == "新负责人"
     assert client.get("/api/v1/customers/c-approval", headers=applicant).status_code == 404
     transferred = client.get(f"/api/v1/visits/{visit.json()['data']['id']}", headers=group_headers)
     assert transferred.json()["data"]["owner"] == "新负责人"
@@ -351,5 +362,58 @@ def test_delete_requires_approval_and_is_soft_deleted(identity_client) -> None:
         json={"approve": True, "comment": "同意归档"},
     )
     assert approved.status_code == 200, approved.text
+    assert approved.json()["data"]["reviewComment"] == "同意归档"
     assert client.get("/api/v1/customers/c-soft-delete", headers=group_headers).status_code == 404
     assert client.get("/api/v1/customers", headers=group_headers).json()["data"]["total"] == 0
+
+
+def test_crm_edit_and_ownership_request_are_atomic(identity_client) -> None:
+    client, testing_session = identity_client
+    headers = {"Authorization": f"Bearer {login(client, 'groupadmin', 'test-admin-password')}"}
+    with testing_session() as session:
+        department = session.scalar(
+            select(Organization).where(Organization.code == "cmcc-gd-sz-ft-enterprise")
+        )
+    assert client.post(
+        "/api/v1/customers/import", headers=headers,
+        json={"rows": [_row(str(department.id), "c-atomic", "原始客户有限公司")]},
+    ).status_code == 201
+    original = client.get("/api/v1/customers/c-atomic", headers=headers).json()["data"]
+    edit = {
+        "version": original["version"], "name": "已编辑客户有限公司",
+        "industry": "信息技术", "contact": "张经理", "phone": "13800001111",
+        "need": "云网融合", "stage": "已联系", "stageReason": "电话确认了初步需求",
+        "potential": "高", "score": 99, "nextAction": "安排拜访",
+        "isQianBaiWanGroup": "否", "isKeyAccount": "否",
+        "stageHistory": [{"operator": "伪造审批人", "toStage": "已成交"}],
+        "reasons": ["伪造评分原因"],
+        "ownershipRequest": {
+            "targetOrganizationId": str(department.id),
+            "targetOwnerName": original["ownerName"],
+            "reason": "客户经理分工重新调整",
+        },
+    }
+    failed = client.patch("/api/v1/customers/c-atomic", headers=headers, json=edit)
+    assert failed.status_code == 400
+    unchanged = client.get("/api/v1/customers/c-atomic", headers=headers).json()["data"]
+    assert unchanged["name"] == original["name"]
+    assert unchanged["version"] == original["version"]
+    assert unchanged["auditEvents"] == []
+    assert client.get("/api/v1/customers/requests", headers=headers).json()["data"] == []
+
+    edit["ownershipRequest"]["targetOwnerName"] = "新负责人"
+    saved = client.patch("/api/v1/customers/c-atomic", headers=headers, json=edit)
+    assert saved.status_code == 200, saved.text
+    detail = client.get("/api/v1/customers/c-atomic", headers=headers).json()["data"]
+    assert detail["name"] == "已编辑客户有限公司"
+    assert detail["ownerName"] == original["ownerName"]
+    assert len(detail["extraData"]["stageHistory"]) == 1
+    assert detail["extraData"]["stageHistory"][0]["operator"] == "测试集团管理员"
+    assert detail["score"] != 99
+    assert detail["extraData"]["reasons"] != ["伪造评分原因"]
+    assert {event["action"] for event in detail["auditEvents"]} == {
+        "customer_edited", "stage_changed", "ownership_requested"
+    }
+    requests = client.get("/api/v1/customers/requests", headers=headers).json()["data"]
+    assert len(requests) == 1
+    assert requests[0]["status"] == "pending"

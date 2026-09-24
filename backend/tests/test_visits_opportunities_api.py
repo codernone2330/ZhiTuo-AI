@@ -152,6 +152,7 @@ def test_visit_completion_updates_customer_and_deal_atomically(identity_client):
     assert customer["stage"] == "已成交"
     assert customer["extraData"]["lastContact"]
     assert customer["extraData"]["stageHistory"][-1]["source"] == "拜访结果回填"
+    assert customer["auditEvents"][0]["action"] == "stage_changed"
     assert "近期已有互动" in customer["extraData"]["reasons"][-1]
     assert client.get("/api/v1/opportunities", headers=headers).json()["data"]["total"] == 0
     again = client.post(

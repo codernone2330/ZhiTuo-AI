@@ -1,11 +1,13 @@
 import re
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, CommonErrorCode
 from app.modules.auth.dependencies import IdentityContext
+from app.modules.customers.audit import customer_timeline, record_customer_event
 from app.modules.customers.models import Customer, CustomerImportBatch
 from app.modules.customers.schemas import CustomerImportRequest, CustomerImportRow, CustomerUpdate
 from app.modules.organizations.models import Organization
@@ -144,7 +146,9 @@ def get_customer(session: Session, identity: IdentityContext, customer_ref: str)
     if customer is None:
         raise AppError(CommonErrorCode.NOT_FOUND, "客户不存在或不在授权范围内", 404)
     organization = session.get(Organization, customer.organization_id)
-    return serialize_customer(customer, organization, include_extra=True)
+    data = serialize_customer(customer, organization, include_extra=True)
+    data["auditEvents"] = customer_timeline(session, customer)
+    return data
 
 
 def update_customer(
@@ -176,9 +180,29 @@ def update_customer(
     )
     if duplicate:
         raise AppError(CommonErrorCode.CONFLICT, "企业名称或电话与现有客户重复", 409)
+    if payload.stage != customer.stage and not payload.stageReason.strip():
+        raise AppError(CommonErrorCode.INVALID_ARGUMENT, "经营阶段变化必须填写流转说明", 400)
+    before = {
+        "name": customer.name, "industry": customer.industry,
+        "contact": customer.contact_name, "phone": customer.contact_phone,
+        "need": customer.need, "stage": customer.stage,
+        "potential": customer.potential, "score": customer.score,
+        "nextAction": customer.next_action,
+        "isQianBaiWanGroup": customer.is_qian_bai_wan_group,
+        "isKeyAccount": customer.is_key_account,
+    }
+    old_stage = customer.stage
+    now = datetime.now(timezone.utc)
     extra_data = dict(customer.extra_data or {})
-    extra_data["stageHistory"] = payload.stageHistory
-    extra_data["reasons"] = payload.reasons
+    if payload.stage != old_stage:
+        history = list(extra_data.get("stageHistory") or [])
+        history.append({
+            "id": f"stage-edit-{uuid.uuid4().hex}", "time": now.isoformat(),
+            "fromStage": old_stage, "toStage": payload.stage,
+            "operator": identity.user.display_name, "owner": customer.owner_name,
+            "source": "CRM手工更新", "note": payload.stageReason.strip(),
+        })
+        extra_data["stageHistory"] = history
     result = session.execute(
         update(Customer)
         .where(Customer.id == customer.id, Customer.version == payload.version)
@@ -191,7 +215,7 @@ def update_customer(
             need=payload.need,
             stage=payload.stage,
             potential=payload.potential,
-            score=payload.score,
+            score=customer.score,
             next_action=payload.nextAction,
             is_qian_bai_wan_group=_bool_value(payload.isQianBaiWanGroup),
             is_key_account=_bool_value(payload.isKeyAccount),
@@ -202,9 +226,45 @@ def update_customer(
     if result.rowcount != 1:
         session.rollback()
         raise AppError(CommonErrorCode.CONFLICT, "客户已被其他人修改，请刷新后重试", 409)
+    session.refresh(customer)
+    from app.modules.opportunities.service import _reasons, _score
+
+    organization = session.get(Organization, customer.organization_id)
+    customer.score = _score(customer)
+    customer.extra_data = {**extra_data, "reasons": _reasons(customer, organization)}
+    after = {
+        "name": customer.name, "industry": customer.industry,
+        "contact": customer.contact_name, "phone": customer.contact_phone,
+        "need": customer.need, "stage": customer.stage,
+        "potential": customer.potential, "score": customer.score,
+        "nextAction": customer.next_action,
+        "isQianBaiWanGroup": customer.is_qian_bai_wan_group,
+        "isKeyAccount": customer.is_key_account,
+    }
+    if before != after:
+        record_customer_event(session, customer, identity.user, "customer_edited", before, after,
+                              payload.stageReason.strip() or None, at=now)
+    if old_stage != customer.stage:
+        record_customer_event(session, customer, identity.user, "stage_changed",
+                              {"stage": old_stage}, {"stage": customer.stage},
+                              payload.stageReason.strip(), at=now)
+    if payload.ownershipRequest:
+        from app.modules.customers.requests import create_request
+        from app.modules.customers.schemas import CustomerRequestCreate
+
+        request_data = payload.ownershipRequest
+        create_request(
+            session, identity, customer_ref,
+            CustomerRequestCreate(
+                kind="ownership", reason=request_data.reason,
+                targetOrganizationId=request_data.targetOrganizationId,
+                targetOwnerName=request_data.targetOwnerName,
+            ),
+            customer=customer, commit=False,
+        )
     session.commit()
     session.refresh(customer)
-    return serialize_customer(customer, session.get(Organization, customer.organization_id), True)
+    return serialize_customer(customer, organization, True)
 
 
 def _external_id(row: CustomerImportRow) -> str:

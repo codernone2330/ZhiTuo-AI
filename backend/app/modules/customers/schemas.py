@@ -65,7 +65,15 @@ class CustomerUpdate(BaseModel):
     isKeyAccount: bool | str
     stageHistory: list[dict] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
+    stageReason: str = Field("", max_length=300)
+    ownershipRequest: "CustomerOwnershipRequest | None" = None
     version: int = Field(ge=1)
+
+
+class CustomerOwnershipRequest(BaseModel):
+    targetOrganizationId: uuid.UUID
+    targetOwnerName: str = Field(min_length=1, max_length=80)
+    reason: str = Field(min_length=5, max_length=300)
 
 
 class CustomerRequestCreate(BaseModel):
