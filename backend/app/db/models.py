@@ -1,5 +1,6 @@
 """集中导入模型，确保 Alembic 能发现所有 metadata。"""
 
+from app.modules.ai.models import ExternalLead, IntegrationAudit
 from app.modules.auth.models import AuthSession, Role, UserRole
 from app.modules.customers.models import (
     Customer,
@@ -7,12 +8,17 @@ from app.modules.customers.models import (
     CustomerImportBatch,
     CustomerRequest,
 )
+from app.modules.documents.models import DocumentEvent, SharedDocument
 from app.modules.organizations.models import Organization
 from app.modules.users.models import User
 from app.modules.visits.models import Visit
 
 __all__ = [
     "AuthSession",
+    "ExternalLead",
+    "IntegrationAudit",
+    "SharedDocument",
+    "DocumentEvent",
     "Customer",
     "CustomerEvent",
     "CustomerImportBatch",
