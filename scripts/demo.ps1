@@ -24,6 +24,19 @@ function Get-PythonPath {
     throw "Python not found. Install Python 3 and add it to PATH."
 }
 
+function Resolve-Docker {
+    $cmd = Get-Command docker -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\DockerDesktop\resources\bin\docker.exe"),
+        "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) { return $candidate }
+    }
+    return $null
+}
+
 function Stop-Demo {
     $targets = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -match "map_integration\.py|company\.py" }
@@ -64,11 +77,23 @@ if ($Stop) {
 if ($Full) {
     $startCmd = Join-Path $root "start.cmd"
     if (-not (Test-Path -LiteralPath $startCmd)) {
-        throw "start.cmd not found at project root. Full mode requires Docker Desktop and start.cmd."
+        Write-Host "start.cmd not found at project root; cannot start the full system." -ForegroundColor Yellow
+        Write-Host "Falling back to the Map + QCC tool pages (no Docker needed)." -ForegroundColor Yellow
     }
-    Write-Host "Starting the FULL system via start.cmd (requires Docker Desktop)..." -ForegroundColor Cyan
-    & $startCmd
-    exit $LASTEXITCODE
+    elseif (-not (Resolve-Docker)) {
+        Write-Host ""
+        Write-Host "Docker Desktop was not found, so the FULL system cannot start." -ForegroundColor Yellow
+        Write-Host "Reason: start.cmd needs Docker Desktop to build and run the API/db containers." -ForegroundColor Yellow
+        Write-Host "Falling back to the Map + QCC tool pages (no Docker needed)." -ForegroundColor Yellow
+        Write-Host "To use the full system later: install Docker Desktop, start it, then run 'demo full' again." -ForegroundColor Yellow
+        Write-Host ""
+        # Fall through to the default tool-page flow below.
+    }
+    else {
+        Write-Host "Starting the FULL system via start.cmd (requires Docker Desktop)..." -ForegroundColor Cyan
+        & $startCmd
+        exit $LASTEXITCODE
+    }
 }
 
 $python = Get-PythonPath
