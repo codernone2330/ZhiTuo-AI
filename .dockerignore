@@ -5,6 +5,10 @@
 **/__pycache__
 **/*.pyc
 .env
+# 绝不把本地凭证打进镜像；运行时请用 .env 的 TENCENT_MAP_KEY / QCC_* 传入
+map_and_company/TenCentApiKey.txt
+map_and_company/QccAppKey.txt
+map_and_company/QccSecret.txt
 data/*
 !data/智拓商机作战助手-开发版.html
 !data/china-mobile-logo.svg

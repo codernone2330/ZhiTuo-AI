@@ -28,6 +28,9 @@ class ExternalLead(TimestampMixin, Base):
     review_reason: Mapped[str | None] = mapped_column(Text)
     customer_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("customers.id"))
     version: Mapped[int] = mapped_column(Integer, default=1)
+    # 企查查工商数据评分（0-100）与评分明细 JSON（等级/原因/风险标记）
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    score_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class IntegrationAudit(Base):

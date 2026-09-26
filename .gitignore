@@ -4,6 +4,12 @@
 !.env.example
 !.env.shared.example
 data/TenCentApiKey.txt
+# 本地腾讯地图 / 企查查凭证（切勿提交 Git）
+map_and_company/TenCentApiKey.txt
+QccAppKey.txt
+QccSecret.txt
+map_and_company/QccAppKey.txt
+map_and_company/QccSecret.txt
 
 # Python
 __pycache__/

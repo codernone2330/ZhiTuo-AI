@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Literal
@@ -81,7 +82,46 @@ def _lead_data(lead: ExternalLead) -> dict:
         "reviewReason": lead.review_reason,
         "customerId": str(lead.customer_id) if lead.customer_id else None,
         "version": lead.version,
+        "score": lead.score,
+        "scoreDetail": _load_score_detail(lead.score_detail),
     }
+
+
+def _load_score_detail(raw: str | None) -> dict | None:
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _company_scorer():
+    """惰性加载独立企查查模块（map_and_company/company.py），用于商机评分。
+
+    未配置凭证或模块不可导入时返回 None，采集主流程不受影响。
+    """
+    try:
+        from map_and_company import company  # noqa: PLC0415
+    except Exception:
+        return None
+    return company
+
+
+def _score_lead(row: dict, scorer) -> dict | None:
+    """用企查查工商详情为一条线索评分；任何异常都降级为 None。"""
+    if scorer is None:
+        return None
+    try:
+        detail = scorer.get_company_detail(str(row.get("name") or "")) or {}
+    except Exception:
+        detail = {}
+    if not isinstance(detail, dict):
+        detail = {}
+    try:
+        return scorer.score_company({**row, **detail})
+    except Exception:
+        return None
 
 
 def _lead_scope(identity: IdentityContext):
@@ -111,6 +151,7 @@ def capture(payload: CaptureRequest, request: Request, identity: CurrentIdentity
         raise AppError(CommonErrorCode.FORBIDDEN, "只有经营管理人员可以采集外部线索", 403)
     organization = _assert_customer_organization(session, identity, payload.organizationId)
     rows = search_companies(payload.searchTerm.strip())
+    scorer = _company_scorer()
     created = []
     for row in rows:
         normalized = normalize_customer_name(row["name"])
@@ -133,6 +174,7 @@ def capture(payload: CaptureRequest, request: Request, identity: CurrentIdentity
             )
         except ValueError:
             established = None
+        score_payload = _score_lead(row, scorer)
         lead = ExternalLead(
             id=uuid.uuid4(),
             provider="qichacha",
@@ -146,6 +188,8 @@ def capture(payload: CaptureRequest, request: Request, identity: CurrentIdentity
             status="pending",
             captured_by=identity.user.id,
             version=1,
+            score=score_payload.get("score") if score_payload else None,
+            score_detail=json.dumps(score_payload, ensure_ascii=False) if score_payload else None,
         )
         session.add(lead)
         created.append(_lead_data(lead))
