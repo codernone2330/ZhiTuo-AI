@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Literal
@@ -96,6 +97,10 @@ def _load_score_detail(raw: str | None) -> dict | None:
         return None
 
 
+# 每次采集最多对前 N 条线索调用企查查工商详情（计费）；其余仅用搜索字段轻量评分。
+SCORE_ENRICH_LIMIT = int(os.environ.get("ZHITUO_LEAD_SCORE_LIMIT", "3"))
+
+
 def _company_scorer():
     """惰性加载独立企查查模块（map_and_company/company.py），用于商机评分。
 
@@ -108,18 +113,24 @@ def _company_scorer():
     return company
 
 
-def _score_lead(row: dict, scorer) -> dict | None:
-    """用企查查工商详情为一条线索评分；任何异常都降级为 None。"""
+def _score_lead(row: dict, scorer, *, with_detail: bool = True) -> dict | None:
+    """为一条线索评分。
+
+    with_detail=True 时会额外调用企查查工商详情（计费），用于更精准的评分；
+    为节省额度，对靠后的线索传 False，仅用搜索结果字段做轻量评分。
+    """
     if scorer is None:
         return None
+    info = dict(row)
+    if with_detail:
+        try:
+            detail = scorer.get_company_detail(str(row.get("name") or "")) or {}
+        except Exception:
+            detail = {}
+        if isinstance(detail, dict):
+            info.update(detail)
     try:
-        detail = scorer.get_company_detail(str(row.get("name") or "")) or {}
-    except Exception:
-        detail = {}
-    if not isinstance(detail, dict):
-        detail = {}
-    try:
-        return scorer.score_company({**row, **detail})
+        return scorer.score_company(info)
     except Exception:
         return None
 
@@ -153,7 +164,7 @@ def capture(payload: CaptureRequest, request: Request, identity: CurrentIdentity
     rows = search_companies(payload.searchTerm.strip())
     scorer = _company_scorer()
     created = []
-    for row in rows:
+    for index, row in enumerate(rows):
         normalized = normalize_customer_name(row["name"])
         existing = session.scalar(
             select(ExternalLead.id).where(
@@ -174,7 +185,7 @@ def capture(payload: CaptureRequest, request: Request, identity: CurrentIdentity
             )
         except ValueError:
             established = None
-        score_payload = _score_lead(row, scorer)
+        score_payload = _score_lead(row, scorer, with_detail=index < SCORE_ENRICH_LIMIT)
         lead = ExternalLead(
             id=uuid.uuid4(),
             provider="qichacha",

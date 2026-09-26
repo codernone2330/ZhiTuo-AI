@@ -30,6 +30,9 @@ venv/
 *.sqlite3
 *.log
 src/.cache/
+# 接口磁盘缓存（含企业数据，无需提交）
+data/.qcc_cache.json
+data/.tencent_geocode_cache.json
 
 # IDE / OS
 .vscode/

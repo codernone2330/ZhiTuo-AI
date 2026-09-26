@@ -68,7 +68,7 @@ DETAIL_ENDPOINT = "https://api.qichacha.com/ECIV4/GetBasicDetailsByName"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("ZHITUO_QCC_PORT", "8768"))
 MAX_SEARCH_RESULTS = int(os.environ.get("ZHITUO_QCC_MAX_RESULTS", "20"))
-DETAIL_TOP_N = int(os.environ.get("ZHITUO_QCC_DETAIL_TOP_N", "5"))
+DETAIL_TOP_N = int(os.environ.get("ZHITUO_QCC_DETAIL_TOP_N", "3"))
 CACHE_SECONDS = int(os.environ.get("ZHITUO_QCC_CACHE", "600"))
 DISK_CACHE_DAYS = int(os.environ.get("ZHITUO_QCC_DISK_CACHE_DAYS", "30"))
 REQUEST_TIMEOUT = 20
@@ -508,7 +508,7 @@ def search_and_score(term: str, detail_top_n: int | None = None) -> dict[str, An
 
     线索结构可直接写入后端 external_leads 待审核池。
     """
-    top_n = detail_top_n or DETAIL_TOP_N
+    top_n = DETAIL_TOP_N if detail_top_n is None else max(0, int(detail_top_n))
     if not (isinstance(term, str) and term.strip()):
         raise QccApiError("搜索关键词不能为空。", code="INVALID_REQUEST", http_status=HTTPStatus.BAD_REQUEST)
 
