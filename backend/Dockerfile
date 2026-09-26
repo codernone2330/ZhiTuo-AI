@@ -9,7 +9,7 @@ COPY backend/pyproject.toml ./
 COPY backend/app ./app
 COPY backend/migrations ./migrations
 COPY backend/alembic.ini ./
-COPY src/map_integration.py ./src/map_integration.py
+COPY map_and_company/ ./map_and_company/
 
 RUN pip install --no-cache-dir .
 

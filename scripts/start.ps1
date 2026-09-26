@@ -70,9 +70,9 @@ if (-not (Test-Path -LiteralPath ".env")) {
 }
 
 # Backward-compatible local secret loading: keep the Tencent key out of the image
-# while allowing the existing data/TenCentApiKey.txt file to power the unified API.
+# while allowing the existing map_and_company/TenCentApiKey.txt file to power the unified API.
 if ([string]::IsNullOrWhiteSpace($env:TENCENT_MAP_KEY)) {
-    $tencentKeyFile = Join-Path $repositoryRoot "data\TenCentApiKey.txt"
+    $tencentKeyFile = Join-Path $repositoryRoot "map_and_company\TenCentApiKey.txt"
     if (Test-Path -LiteralPath $tencentKeyFile) {
         $tencentKey = (Get-Content -LiteralPath $tencentKeyFile -Raw).Trim()
         if (-not [string]::IsNullOrWhiteSpace($tencentKey)) {

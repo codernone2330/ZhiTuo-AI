@@ -28,7 +28,7 @@
 Key 读取顺序
 -----------
 1. 环境变量 TENCENT_MAP_KEY；
-2. 同仓库 data/TenCentApiKey.txt（纯文本，首行即 key）。
+2. 与本文件同目录的 TenCentApiKey.txt（纯文本，首行即 key）。
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ from typing import Any
 # --------------------------------------------------------------------------- #
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent
-DEFAULT_KEY_FILE = REPO / "data" / "TenCentApiKey.txt"
+DEFAULT_KEY_FILE = ROOT / "TenCentApiKey.txt"
 
 GEO_ENDPOINT = "https://apis.map.qq.com/ws/geocoder/v1/"
 DISTANCE_ENDPOINT = "https://apis.map.qq.com/ws/distance/v1/matrix"

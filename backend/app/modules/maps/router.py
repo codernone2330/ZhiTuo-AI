@@ -26,7 +26,7 @@ def _success(request: Request, data: Any) -> dict:
 def map_status(request: Request, identity: CurrentIdentity) -> dict:
     del identity
     try:
-        integration = importlib.import_module("src.map_integration")
+        integration = importlib.import_module("map_and_company.map_integration")
         integration.load_tencent_key()
         configured = True
     except Exception:
@@ -45,7 +45,7 @@ def visit_route(
 ) -> dict:
     del identity
     try:
-        integration = importlib.import_module("src.map_integration")
+        integration = importlib.import_module("map_and_company.map_integration")
         plan = integration.plan_visit_route(payload.items, payload.start, payload.mode)
         if plan.get("ok") and plan.get("stops"):
             points = [
@@ -69,7 +69,7 @@ def visit_route(
                 plan["mapWarning"] = str(exc)
         return _success(request, plan)
     except Exception as exc:
-        integration = importlib.import_module("src.map_integration")
+        integration = importlib.import_module("map_and_company.map_integration")
         if isinstance(exc, integration.MapApiError):
             raise AppError(
                 exc.code,
