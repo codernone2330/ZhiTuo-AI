@@ -97,6 +97,7 @@ def _products(customer: Customer) -> list[dict]:
 
 def serialize_opportunity(customer: Customer, organization: Organization) -> dict:
     extra = customer.extra_data or {}
+    detail = extra.get("scoreDetail") or {}
     return {
         "customerId": customer.external_id,
         "customerName": customer.name,
@@ -109,6 +110,17 @@ def serialize_opportunity(customer: Customer, organization: Organization) -> dic
         "nextAction": customer.next_action,
         "productDirections": _products(customer),
         "updatedAt": customer.updated_at.isoformat(),
+        # —— 企业评分模型输出（供前端展示评分与各指标字段）——
+        "modelDriven": bool(detail),
+        "modelVersion": detail.get("modelVersion"),
+        "tier": detail.get("persistTier"),
+        "solutionLine": detail.get("solutionLine"),
+        "solutionCoefficient": detail.get("solutionCoefficient"),
+        "typicalSolution": detail.get("typicalSolution"),
+        "features": detail.get("features"),
+        "scores": detail.get("scores"),
+        "tiers": detail.get("tiers"),
+        "anchors": detail.get("anchors"),
     }
 
 
@@ -159,6 +171,15 @@ def refresh_opportunities(
     ):
         raise AppError(CommonErrorCode.FORBIDDEN, "当前角色不能更新商机", 403)
     organization = _scope_org(session, identity, org_id)
+
+    # ① 带工商档案（profile）的客户 → 由企业评分模型接管（批量评分 + 区域锚点锁，
+    #    保证同一区域分数一致）。模型结果写入 customer.score / extra_data.scoreDetail。
+    from app.modules.scoring.service import refresh_customer_scores
+
+    model_result = refresh_customer_scores(session, identity, org_id)
+    model_scored = model_result.get("scored", 0)
+
+    # ② 无工商档案的客户 → 旧规则兜底（模型依赖工商数据，无档案时不适用）
     customers = session.scalars(_statement(identity, organization).with_for_update()).all()
     orgs = {
         item.id: item
@@ -168,8 +189,12 @@ def refresh_opportunities(
             )
         ).all()
     }
-    changed = 0
+    rule_changed = 0
+    rule_scored = 0
     for customer in customers:
+        if (customer.extra_data or {}).get("profile"):
+            continue  # 已由模型接管，勿用规则覆盖
+        rule_scored += 1
         score = _score(customer)
         reasons = _reasons(customer, orgs[customer.organization_id])
         extra = dict(customer.extra_data or {})
@@ -184,18 +209,35 @@ def refresh_opportunities(
                 session, customer, identity.user, before_score, before_reasons,
                 "商机评分刷新",
             )
-            changed += 1
+            rule_changed += 1
     session.commit()
-    ranked = sorted(customers, key=lambda item: item.score, reverse=True)
+
+    all_customers = list(session.scalars(_statement(identity, organization)).all())
+    all_orgs = {
+        item.id: item
+        for item in session.scalars(
+            select(Organization).where(
+                Organization.id.in_({customer.organization_id for customer in all_customers})
+            )
+        ).all()
+    }
+    ranked = sorted(all_customers, key=lambda item: item.score, reverse=True)
     return {
-        "total": len(customers),
-        "changed": changed,
-        "high": sum(item.score >= 80 for item in customers),
+        "total": len(all_customers),
+        "changed": model_result.get("changed", 0) + rule_changed,
+        "modelScored": model_scored,
+        "ruleScored": rule_scored,
+        "high": sum(item.score >= 80 for item in all_customers),
         "stale": sum(
             _last_contact(item) is None
             or (datetime.now(timezone.utc) - _last_contact(item)).days > 7
-            for item in customers
+            for item in all_customers
         ),
+        "tierCounts": model_result.get("tierCounts") or {},
+        "anchors": model_result.get("anchors") or {},
         "updatedAt": datetime.now(timezone.utc).isoformat(),
-        "top": [serialize_opportunity(item, orgs[item.organization_id]) for item in ranked[:5]],
+        "top": [
+            serialize_opportunity(item, all_orgs[item.organization_id])
+            for item in ranked[:5]
+        ],
     }

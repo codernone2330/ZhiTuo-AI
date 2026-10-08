@@ -9,6 +9,7 @@ from app.modules.maps.router import router as maps_router
 from app.modules.opportunities.router import router as opportunities_router
 from app.modules.organizations.router import router as organizations_router
 from app.modules.reports.router import router as reports_router
+from app.modules.scoring.router import router as scoring_router
 from app.modules.users.router import router as users_router
 from app.modules.visits.router import router as visits_router
 
@@ -22,6 +23,7 @@ api_router.include_router(customers_router, prefix="/customers", tags=["customer
 api_router.include_router(visits_router, prefix="/visits", tags=["visits"])
 api_router.include_router(opportunities_router, prefix="/opportunities", tags=["opportunities"])
 api_router.include_router(ai_router, prefix="/ai", tags=["ai"])
+api_router.include_router(scoring_router, prefix="/scoring", tags=["scoring"])
 api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
 api_router.include_router(reports_router, prefix="/reports", tags=["reports"])
 

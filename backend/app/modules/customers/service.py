@@ -232,11 +232,17 @@ def update_customer(
         session.rollback()
         raise AppError(CommonErrorCode.CONFLICT, "客户已被其他人修改，请刷新后重试", 409)
     session.refresh(customer)
-    from app.modules.opportunities.service import _reasons, _score
-
     organization = session.get(Organization, customer.organization_id)
-    customer.score = _score(customer)
-    customer.extra_data = {**extra_data, "reasons": _reasons(customer, organization)}
+    if extra_data.get("profile") or extra_data.get("scoreDetail"):
+        # 该客户已由企业评分模型接管：保留模型分与模型理由，避免被旧规则覆盖。
+        # 模型是批量的、依赖区域锚点锁，重新计算请走 POST /api/v1/scoring/refresh
+        # 或「AI 更新商机」（两者都会调用模型），不要在单条编辑时孤立重算。
+        customer.extra_data = extra_data
+    else:
+        from app.modules.opportunities.service import _reasons, _score
+
+        customer.score = _score(customer)
+        customer.extra_data = {**extra_data, "reasons": _reasons(customer, organization)}
     after = {
         "name": customer.name, "industry": customer.industry,
         "contact": customer.contact_name, "phone": customer.contact_phone,
@@ -280,6 +286,20 @@ def _external_id(row: CustomerImportRow) -> str:
     return row.externalId or f"C-{uuid.uuid4().hex[:12].upper()}"
 
 
+# 统一社会信用代码：18 位大写字母/数字。这是企业唯一身份，两个不同信用代码
+# 就是两家不同法人主体 —— 即使它们共用同一个联系电话。
+_BUSINESS_IDENTITY = re.compile(r"^[0-9A-Z]{18}$")
+
+
+def _has_business_identity(value: str | None) -> bool:
+    """判断导入行带的是不是**真实业务身份**（信用代码），而不是前端生成的本地占位 ID。
+
+    前端 `customerImportPayload` 会把自己的本地 id（形如 `c-m1abc2x3y`）当 externalId 传上来，
+    那不是企业身份。若拿「有没有传 externalId」来判断，会把交互式导入的手机号判重一并关掉。
+    """
+    return bool(value) and bool(_BUSINESS_IDENTITY.match(str(value).strip().upper()))
+
+
 def import_customers(
     session: Session, identity: IdentityContext, payload: CustomerImportRequest
 ) -> dict:
@@ -295,6 +315,17 @@ def import_customers(
     inserted = duplicate = rejected = 0
     duplicate_items: list[dict] = []
     organization_cache: dict[uuid.UUID, Organization] = {}
+    # 若导入行带工商档案（profile），用企业评分模型打分；失败不阻断导入。
+    scoring_service = None
+    score_map: dict[int, tuple[dict, dict]] = {}
+    if any(getattr(row, "profile", None) for row in payload.rows):
+        try:
+            from app.modules.scoring import service as scoring_service  # noqa: PLC0415
+
+            score_map = scoring_service.score_import_rows(session, payload.rows)
+        except Exception:  # noqa: BLE001 - 评分失败降级为沿用行内 score
+            scoring_service = None
+            score_map = {}
     for index, row in enumerate(payload.rows, start=1):
         try:
             organization = organization_cache.get(row.organizationId)
@@ -315,7 +346,12 @@ def import_customers(
                 (Customer.organization_id == organization.id)
                 & (Customer.normalized_name == normalized),
             ]
-            if row.phone:
+            # 手机号判重只在导入行**没有真实业务身份（统一社会信用代码）**时启用。
+            # 原因：同一集团下多家主体常共用同一个联系电话，若按手机号判重会误删真实客户
+            # （实测某批 5000 家企查查清单信用代码全唯一、同名 0 条，却有 235 家仅因共用
+            # 电话被判重跳过）。反过来，交互式导入传的是前端本地占位 ID（c-xxxx），
+            # **不是**企业身份，此时必须保留手机号判重以防重复录入。
+            if row.phone and not _has_business_identity(row.externalId):
                 duplicate_conditions.append(
                     (Customer.contact_phone == row.phone)
                     & (Customer.organization_id == organization.id)
@@ -336,6 +372,27 @@ def import_customers(
                     User.is_active.is_(True),
                 )
             )
+            extra_data = {
+                "reasons": row.reasons,
+                "tags": row.tags,
+                "sources": row.sources,
+                "lastContact": row.lastContact.isoformat() if row.lastContact else None,
+                "stageHistory": row.stageHistory,
+                "crmFlow": row.crmFlow,
+                "assignmentReason": row.assignmentReason,
+                "assignmentConfidence": row.assignmentConfidence,
+            }
+            if row.profile:
+                extra_data["profile"] = row.profile
+            score_value = row.score
+            scored = score_map.get(index - 1)
+            if scored and scoring_service is not None:
+                detail, meta = scored
+                score_value = detail["persistScore"]
+                extra_data["scoreDetail"] = scoring_service.score_detail_payload(
+                    detail, meta, "v1"
+                )
+                extra_data["reasons"] = scoring_service.explain_scores(detail)
             customer = Customer(
                 external_id=external_id,
                 name=row.name.strip(),
@@ -356,7 +413,7 @@ def import_customers(
                 need=row.need,
                 stage=row.stage,
                 potential=row.potential,
-                score=row.score,
+                score=score_value,
                 next_action=row.nextAction,
                 is_qian_bai_wan_group=_bool_value(row.isQianBaiWanGroup),
                 is_key_account=_bool_value(row.isKeyAccount),
@@ -364,16 +421,7 @@ def import_customers(
                 import_batch_id=batch.id,
                 imported_by=identity.user.id,
                 source_created_at=row.createdAt,
-                extra_data={
-                    "reasons": row.reasons,
-                    "tags": row.tags,
-                    "sources": row.sources,
-                    "lastContact": row.lastContact.isoformat() if row.lastContact else None,
-                    "stageHistory": row.stageHistory,
-                    "crmFlow": row.crmFlow,
-                    "assignmentReason": row.assignmentReason,
-                    "assignmentConfidence": row.assignmentConfidence,
-                },
+                extra_data=extra_data,
             )
             session.add(customer)
             session.flush()

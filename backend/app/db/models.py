@@ -11,6 +11,7 @@ from app.modules.customers.models import (
 )
 from app.modules.documents.models import DocumentEvent, DocumentVersion, SharedDocument
 from app.modules.organizations.models import Organization
+from app.modules.scoring.models import ScoreAnchorLock
 from app.modules.users.models import User
 from app.modules.visits.models import Visit
 
@@ -28,6 +29,7 @@ __all__ = [
     "CustomerRequest",
     "Organization",
     "Role",
+    "ScoreAnchorLock",
     "User",
     "UserRole",
     "Visit",

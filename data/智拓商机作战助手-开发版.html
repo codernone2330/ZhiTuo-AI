@@ -545,6 +545,34 @@
     .login-shell{border-color:rgba(255,255,255,.38);background:rgba(255,255,255,.9);box-shadow:0 42px 120px rgba(0,48,78,.3);backdrop-filter:saturate(140%) blur(22px);-webkit-backdrop-filter:saturate(140%) blur(22px)}.login-panel{background:rgba(255,255,255,.92)}
     *{scrollbar-width:thin;scrollbar-color:rgba(102,112,133,.34) transparent}*::-webkit-scrollbar{width:9px;height:9px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:var(--radius-pill);background:rgba(102,112,133,.3);background-clip:padding-box}*::-webkit-scrollbar-thumb:hover{background:rgba(71,84,103,.44);background-clip:padding-box}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+    .opp-tier{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;margin-left:7px;border-radius:7px;font-size:12px;font-weight:800;color:#fff}
+    .tier-S{background:#d9382f}.tier-A{background:#e8791c}.tier-B{background:#2f80ed}.tier-C{background:#27a05a}.tier-D{background:#98a2b3}
+    .opp-line{margin:0 0 9px;font-size:11px;color:#4a5a72}
+    .opp-line b{color:var(--text)}
+    .feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;margin:9px 0 2px}
+    .feat-row{display:flex;align-items:center;gap:7px;font-size:10px;color:#64748b}
+    .feat-name{flex:0 0 56px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .feat-bar{flex:1;height:6px}
+    .feat-val{flex:0 0 30px;text-align:right;font-variant-numeric:tabular-nums;color:#334155;font-weight:700}
+    .model-panel{margin:14px 0;padding:15px;border:1px solid #e3eaf2;border-radius:12px;background:#f8fbfe}
+    .model-panel h4{margin:0 0 3px;font-size:13px}
+    .model-versions{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 12px}
+    .version-chip{padding:6px 10px;border-radius:9px;background:#fff;border:1px solid #e3eaf2;font-size:11px;color:#425066}
+    .version-chip b{font-size:13px;color:var(--text)}
+    .model-note{margin-top:10px;font-size:10px;color:#7b8798;line-height:1.7}
+    .contrib{margin:10px 0 2px}
+    .contrib-axis{display:flex;align-items:center;gap:8px}
+    .contrib-end{flex:0 0 auto;font-size:10px;color:#8a93a3;font-variant-numeric:tabular-nums}
+    .contrib-bar{flex:1;display:flex;height:14px;border-radius:5px;overflow:hidden;background:#eef2f7;box-shadow:inset 0 0 0 1px rgba(16,24,40,.05)}
+    .contrib-bar i{display:block;height:100%}
+    .contrib-legend{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:7px;font-size:10px;color:#5b6b7d}
+    .contrib-item{display:flex;align-items:center;gap:4px;min-width:0}
+    .contrib-item i{flex:0 0 auto;width:8px;height:8px;border-radius:2px}
+    .contrib-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .contrib-item b{margin-left:auto;color:#26313f;font-variant-numeric:tabular-nums}
+    .contrib-title{margin:0 0 6px;font-size:11px;color:#4a5a72}
+    .opp-score-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:0 0 auto}
+    .opp-tie{font-size:9px;color:#8a93a3;white-space:nowrap}
   </style>
 </head>
 <body>
@@ -883,6 +911,96 @@
         "需求方向："+(c.need||"待识别")+"；"+completeness,
         freshness+"；当前为"+c.potential+"潜客户"
       ];
+    }
+    var MODEL_FEATURES=["真实规模","资本实力","方案线价值","方案契合","数字足迹","触达可达","拜访时效","企业性质"];
+    var TIERS=["S","A","B","C","D"];
+    var TIER_LABEL={S:"S · 优先拜访",A:"A · 重点拜访",B:"B · 常规跟进",C:"C · 培育观察",D:"D · 暂缓"};
+    var CONTRIB_COLORS=["#2f80ed","#1d9e75","#e8791c","#8e44ad","#0f6e56","#d4537e","#5f5e5a","#c0392b"];
+    // 模型配置（含三版权重）只取一次；用于把某个特征的 0-1 取值换算成「占多少分」。
+    var modelConfigCache=null,modelConfigPending=null;
+    function loadModelConfig(){
+      if(modelConfigCache)return Promise.resolve(modelConfigCache);
+      if(!modelConfigPending){
+        modelConfigPending=backendRequest("/scoring/config").then(function(data){
+          modelConfigCache=data;modelConfigPending=null;return data;
+        }).catch(function(){modelConfigPending=null;return null;});
+      }
+      return modelConfigPending;
+    }
+    function activeModelWeights(){
+      if(!modelConfigCache||!modelConfigCache.versions)return null;
+      var version=modelConfigCache.persistVersion||Object.keys(modelConfigCache.versions)[0];
+      var weights=modelConfigCache.versions[version];
+      return weights?{version:version,weights:weights}:null;
+    }
+    // —— 分值口径：展示 / 排序 / 阈值一律用「模型原始分」（1 位小数）——
+    // 落库的 Customer.score 是 int(round(...))，取整会把区分度砍掉一个数量级：
+    // 实测同一取整分最多并列 257 家，而同一小数分最多只有 56 家 → 于是出现
+    // 「筛选 C 时一屏全是 60 分、筛选 D 时一屏全是 50 分」的观感。
+    // 小数分本来就已经在下发的 scoreDetail.scores 里，前端直接用即可，无需改库或重算。
+    function persistVersionName(){return (modelConfigCache&&modelConfigCache.persistVersion)||"";}
+    function modelScoreFrom(source){
+      var scores=source&&source.scores;
+      if(!scores)return null;
+      var value=Number(scores[persistVersionName()]);
+      if(!isFinite(value)){var keys=Object.keys(scores);if(!keys.length)return null;value=Number(scores[keys[0]]);}
+      return isFinite(value)?value:null;
+    }
+    function scoreKey(c){return Number(c.score).toFixed(1);}
+    function compareOpportunity(a,b){
+      var delta=(Number(b.score)||0)-(Number(a.score)||0);
+      if(delta)return delta;
+      var fa=Number(a.modelFeatures&&a.modelFeatures["方案线价值"])||0,
+          fb=Number(b.modelFeatures&&b.modelFeatures["方案线价值"])||0;
+      if(fb-fa)return fb-fa;   // 同分时优先方案价值更高的
+      return String(a.name||"").localeCompare(String(b.name||""),"zh-CN");
+    }
+    // 把 8 个特征换算成「各自贡献了多少分」：贡献分 = 该版权重 × 归一值 × 100，合计即总分。
+    function contributionsOf(c){
+      var active=activeModelWeights();
+      if(!active||!c.modelFeatures)return null;
+      var items=[],total=0;
+      MODEL_FEATURES.forEach(function(name){
+        var weight=Number(active.weights[name]),value=Number(c.modelFeatures[name]);
+        if(!isFinite(weight)||!isFinite(value))return;
+        var points=weight*value*100;
+        items.push({name:name,points:points});total+=points;
+      });
+      return items.length?{items:items,total:total,version:active.version}:null;
+    }
+    function contributionAxisHtml(c,title){
+      var data=contributionsOf(c);
+      if(!data)return "";
+      var sum=data.total||1;
+      var segments=data.items.map(function(item,index){
+        var share=item.points/sum*100;
+        return '<i style="width:'+share.toFixed(2)+'%;background:'+CONTRIB_COLORS[index%CONTRIB_COLORS.length]+'" title="'+esc(item.name)+' '+item.points.toFixed(1)+' 分"></i>';
+      }).join("");
+      var legend=data.items.map(function(item,index){
+        return '<span class="contrib-item"><i style="background:'+CONTRIB_COLORS[index%CONTRIB_COLORS.length]+'"></i><span>'+esc(item.name)+'</span><b>'+item.points.toFixed(1)+'</b></span>';
+      }).join("");
+      return '<div class="contrib">'+(title?'<div class="contrib-title">'+esc(title)+'</div>':"")+'<div class="contrib-axis"><span class="contrib-end">0</span><span class="contrib-bar">'+segments+'</span><span class="contrib-end">'+c.score+' 分</span></div><div class="contrib-legend">'+legend+'</div></div>';
+    }
+    function tierClass(t){return "tier-"+String(t||"D");}
+    function tierBadgeHtml(t){return t?'<span class="opp-tier '+tierClass(t)+'">'+esc(t)+'</span>':"";}
+    function featureBarsHtml(features){
+      if(!features)return "";
+      return '<div class="feat-grid">'+MODEL_FEATURES.map(function(k){
+        var v=Number(features[k]);if(!isFinite(v))v=0;
+        return '<div class="feat-row"><span class="feat-name" title="'+esc(k)+'">'+esc(k)+'</span><span class="progress feat-bar"><i style="width:'+Math.round(Math.max(0,Math.min(1,v))*100)+'%"></i></span><span class="feat-val">'+v.toFixed(2)+'</span></div>';
+      }).join("")+'</div>';
+    }
+    function modelVersionsHtml(c){
+      if(!c.modelScores)return "";
+      var labels=Object.keys(c.modelScores);
+      return '<div class="model-versions">'+labels.map(function(name){
+        return '<div class="version-chip">'+esc(name)+' <b>'+Number(c.modelScores[name]).toFixed(1)+'</b>'+(c.modelTiers&&c.modelTiers[name]?" "+(c.modelTiers[name]):"")+'</div>';
+      }).join("")+'</div>';
+    }
+    function modelPanelHtml(c){
+      if(!c.modelFeatures)return "";
+      var anchors=c.modelAnchors||{};
+      return '<section class="model-panel"><h4>企业评分模型 · 指标明细</h4><p class="subtitle">基准版本 '+esc(c.modelVersion||"v1")+' · 综合分 <b>'+c.score+'</b> · 等级 '+(c.modelTier||"—")+'</p><div class="opp-line"><b>方案线：</b>'+esc(c.solutionLine||"—")+(c.solutionCoefficient?"（价值系数 "+c.solutionCoefficient+'）':"")+(c.typicalSolution?'<br><b>典型方案：</b>'+esc(c.typicalSolution):"")+'</div>'+modelVersionsHtml(c)+contributionAxisHtml(c,"各部分得分构成（合计 = "+c.score+" 分）")+'<div class="model-note">8 个指标均为 0–1 归一化值；锚点：参保 '+esc(anchors.size||"—")+' 人 / 注册资本 '+esc(anchors.capital||"—")+' 万元。该分数为拜访优先级线索排名，不是成交概率预测。</div></section>';
     }
     function crmOrgChain(orgId){
       var chain=[],item=org(orgId);
@@ -1704,7 +1822,60 @@
       return buildSeedData();
     }
     var state=loadState(),legacyCustomerSeed=(state.customers||[]).slice(),legacyVisitSeed=(state.visits||[]).slice();
-    function saveState(){state.meta=state.meta||{};state.meta.total=state.customers.length;localStorage.setItem(STORAGE_KEY,JSON.stringify(state));updateNavCounts();}
+    // 客户 / 拜访的真实来源是后端 PostgreSQL，登录后都会重新同步；
+    // 把全量（数千家、含工商档案与跟进轨迹）镜像进 localStorage 会超出配额，
+    // 而 saveState 在登录链路里被调用，一旦抛错会出现「登录失败」的假象。
+    // 因此落盘统一走这里：先试全量，超配额就降级为不含客户明文的轻量副本，绝不抛错。
+    function compactStateForStorage(){
+      var snapshot=Object.assign({},state);
+      snapshot.customers=[];
+      snapshot.visits=[];
+      return snapshot;
+    }
+    // 配额耗尽的常见元凶（按危害排序）：
+    //  ① STORAGE_KEY+"-before-*"：历史迁移时对整份旧数据的备份，每个都可能数 MB；
+    //  ② zhituo-org-share-data-v4..v8：老版本键，loadState 只在 v9 缺失时才会读，白占配额。
+    // 后端已是唯一真源，这些键可安全清理。返回清理条数。
+    function purgeStaleStorage(){
+      var removed=0;
+      try{
+        var targets=[];
+        Object.keys(localStorage).forEach(function(key){
+          if(key.indexOf(STORAGE_KEY+"-before-")===0){targets.push(key);return;}
+          if(/^zhituo-org-share-data-v[4-8]$/.test(key)){targets.push(key);}
+        });
+        targets.forEach(function(key){try{localStorage.removeItem(key);removed++;}catch(ignore){}});
+      }catch(ignore){}
+      return removed;
+    }
+    var storageCompactOnly=false;
+    function persistState(){
+      if(!storageCompactOnly){
+        try{
+          localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+          return;
+        }catch(error){
+          // QuotaExceededError：先清历史垃圾键再重试一次全量
+        }
+        if(purgeStaleStorage()>0){
+          try{
+            localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+            return;
+          }catch(error){
+            // 仍装不下：本会话后续只写轻量副本，避免重复序列化数 MB 再失败
+          }
+        }
+        storageCompactOnly=true;
+      }
+      try{
+        localStorage.setItem(STORAGE_KEY,JSON.stringify(compactStateForStorage()));
+        return;
+      }catch(error){
+        // 仍然超限：放弃本地缓存（后端才是真源），也不要让异常打断登录/刷新等主流程
+      }
+      try{localStorage.removeItem(STORAGE_KEY);}catch(ignore){}
+    }
+    function saveState(){state.meta=state.meta||{};state.meta.total=state.customers.length;persistState();updateNavCounts();}
     var backendOrganizations=[],backendRoles=[],managedApiUsers=[];
     function backendRoleLabel(code,unit){
       if(code==="super_admin")return "超级管理员";
@@ -1767,11 +1938,14 @@
     function customerImportPayload(c){
       var unit=org(c.managingOrgId),backendOrg=unit&&backendOrganizations.find(function(item){return item.frontendId===unit.id;});
       if(!backendOrg)return null;
-      return {externalId:String(c.id||""),name:String(c.name||""),organizationId:backendOrg.id,ownerName:String(c.owner||"待分配"),kind:c.kind==="猎户"?"猎户":"新客",customerType:"政企客户",carrier:c.carrier||null,industry:c.industry||"待分类",province:c.province||backendOrg.province||null,city:c.city||backendOrg.city||null,area:c.area||backendOrg.district||null,address:c.address||null,contact:c.contact||null,phone:c.phone||null,need:c.need||"需求待识别",stage:c.stage||"线索入池",potential:c.potential||"中",score:Number(c.score)||60,nextAction:c.nextAction||"完成首次触达",isQianBaiWanGroup:customerFlag(c.isQianBaiWanGroup),isKeyAccount:customerFlag(c.isKeyAccount),source:(c.sources||[])[0]||"前端数据适配",sources:c.sources||[],lastContact:c.lastContact||null,createdAt:c.createdAt||null,reasons:c.reasons||[],tags:c.tags||[],stageHistory:c.stageHistory||[],crmFlow:c.crmFlow||[],assignmentReason:c.assignmentReason||"",assignmentConfidence:c.assignmentConfidence||""};
+      return {externalId:String(c.id||""),name:String(c.name||""),organizationId:backendOrg.id,ownerName:String(c.owner||"待分配"),kind:c.kind==="猎户"?"猎户":"新客",customerType:"政企客户",carrier:c.carrier||null,industry:c.industry||"待分类",province:c.province||backendOrg.province||null,city:c.city||backendOrg.city||null,area:c.area||backendOrg.district||null,address:c.address||null,contact:c.contact||null,phone:c.phone||null,need:c.need||"需求待识别",stage:c.stage||"线索入池",potential:c.potential||"中",score:Math.round(Number(c.score)||60),nextAction:c.nextAction||"完成首次触达",isQianBaiWanGroup:customerFlag(c.isQianBaiWanGroup),isKeyAccount:customerFlag(c.isKeyAccount),source:(c.sources||[])[0]||"前端数据适配",sources:c.sources||[],lastContact:c.lastContact||null,createdAt:c.createdAt||null,reasons:c.reasons||[],tags:c.tags||[],stageHistory:c.stageHistory||[],crmFlow:c.crmFlow||[],assignmentReason:c.assignmentReason||"",assignmentConfidence:c.assignmentConfidence||"",profile:c.profile||null};
     }
     function backendCustomerToFrontend(item){
       var original=legacyCustomerSeed.find(function(c){return String(c.id)===String(item.externalId||item.id);})||state.customers.find(function(c){return String(c.id)===String(item.externalId||item.id);})||{},backendOrg=backendOrganizations.find(function(orgItem){return orgItem.id===item.organizationId;}),managingOrgId=backendOrg?backendOrg.frontendId:original.managingOrgId;
       var extra=item.extraData||{},customer=Object.assign({},original,{id:String(item.externalId||item.id),backendId:item.backendId,backendVersion:item.version,backendUpdatedAt:item.updatedAt,name:item.name,managingOrgId:managingOrgId,territoryOrgId:org(managingOrgId)&&org(managingOrgId).parentId,owner:item.ownerName||"待分配",kind:item.kind,customerType:item.customerType||"政企客户",carrier:item.carrier||"",industry:item.industry||"待分类",province:item.province||"",city:item.city||"",area:item.area||"",address:item.address||"",contact:item.contact||"",phone:item.phone||"",need:item.need||"需求待识别",stage:item.stage||"线索入池",potential:item.potential||"中",score:Number(item.score)||0,nextAction:item.nextAction||"完成首次触达",isQianBaiWanGroup:customerFlag(item.isQianBaiWanGroup),isKeyAccount:customerFlag(item.isKeyAccount),createdAt:item.createdAt||original.createdAt||new Date().toISOString(),sources:extra.sources&&extra.sources.length?extra.sources:[item.source||"后端数据库"],lastContact:extra.lastContact||null,reasons:extra.reasons||original.reasons||[],tags:extra.tags||original.tags||[],stageHistory:Array.isArray(extra.stageHistory)?extra.stageHistory:original.stageHistory||[],crmFlow:Array.isArray(extra.crmFlow)?extra.crmFlow:original.crmFlow||[],assignmentReason:extra.assignmentReason||original.assignmentReason||"数据库归属",assignmentConfidence:extra.assignmentConfidence||original.assignmentConfidence||"人工核验",auditEvents:item.auditEvents||original.auditEvents||[],journey:item.journey===undefined?original.journey||null:item.journey});
+      var md=extra.scoreDetail||{};
+      if(md.solutionLine||md.modelVersion){customer.modelDriven=true;customer.modelVersion=md.modelVersion||"";customer.modelTier=md.persistTier||"";customer.solutionLine=md.solutionLine||"";customer.solutionCoefficient=md.solutionCoefficient||null;customer.typicalSolution=md.typicalSolution||"";customer.modelFeatures=md.features||null;customer.modelScores=md.scores||null;customer.modelTiers=md.tiers||null;customer.modelAnchors=md.anchors||null;}
+      var detailScore=modelScoreFrom(md);if(detailScore!==null)customer.score=detailScore;
       initializeCrmTracking(customer);return customer;
     }
     async function fetchAllBackendCustomers(){
@@ -1804,10 +1978,17 @@
     }
     async function synchronizeBackendOpportunities(){
       var items=await fetchAllBackendRows("/opportunities"),byId=new Map(items.map(function(item){return [item.customerId,item];}));
-      state.customers.forEach(function(c){var recommendation=byId.get(c.id);if(recommendation){c.score=recommendation.score;c.reasons=recommendation.reasons||[];c.nextAction=recommendation.nextAction||c.nextAction;c.productDirections=recommendation.productDirections||[];}});
+      state.customers.forEach(function(c){
+        var recommendation=byId.get(c.id);if(!recommendation)return;
+        var modelScore=modelScoreFrom(recommendation);
+        c.score=(modelScore===null?recommendation.score:modelScore);c.reasons=recommendation.reasons||[];c.nextAction=recommendation.nextAction||c.nextAction;c.productDirections=recommendation.productDirections||[];
+        c.modelDriven=!!recommendation.modelDriven;c.modelVersion=recommendation.modelVersion||"";c.modelTier=recommendation.tier||"";
+        c.solutionLine=recommendation.solutionLine||"";c.solutionCoefficient=recommendation.solutionCoefficient||null;c.typicalSolution=recommendation.typicalSolution||"";
+        c.modelFeatures=recommendation.features||null;c.modelScores=recommendation.scores||null;c.modelTiers=recommendation.tiers||null;c.modelAnchors=recommendation.anchors||null;
+      });
       return items;
     }
-    async function synchronizeBackendBusiness(allowBootstrap){await synchronizeBackendVisits(allowBootstrap);await synchronizeBackendOpportunities();}
+    async function synchronizeBackendBusiness(allowBootstrap){await loadModelConfig();await synchronizeBackendVisits(allowBootstrap);await synchronizeBackendOpportunities();}
     function canMigrateDemoData(){return currentUser&&["super_admin","group_admin"].indexOf(currentUser.roleCode)>=0;}
     function previewDemoMigration(){
       if(!canMigrateDemoData())return toast("仅集团管理员可执行演示数据迁移。","error");
@@ -1862,7 +2043,7 @@
     var currentUser=loadUser();
     var deepseekConfig=loadDeepseekConfig();
     var deepseekTestDraft=null;
-    var ui={route:"dashboard",scopeOrgId:currentUser?currentUser.orgId:null,oppQuery:"",oppStage:"all",oppKind:"all",customerQuery:"",customerStage:"all",customerKind:"all",customerPage:1,visitTab:"all",visitCustomerId:"",weeklyOwner:"all",weeklyAnchor:new Date().toISOString(),supportMessages:[],supportPending:false};
+    var ui={route:"dashboard",scopeOrgId:currentUser?currentUser.orgId:null,oppQuery:"",oppStage:"all",oppKind:"all",oppTier:"all",oppShown:40,customerQuery:"",customerStage:"all",customerKind:"all",customerPage:1,visitTab:"all",visitCustomerId:"",weeklyOwner:"all",weeklyAnchor:new Date().toISOString(),supportMessages:[],supportPending:false};
     function org(id){return ORG_BY_ID[id];}
     function isCustomerManagerUser(user){return !!(user&&user.role==="客户经理");}
     function canManageCustomerWork(user){var unit=user?org(user.orgId):null;return !!(unit&&(unit.level!=="department"||unit.name==="集客部"));}
@@ -2323,19 +2504,25 @@
         '<div class="grid-main section-gap"><section class="card"><div class="panel-head"><div><h2>商机转化漏斗</h2><p>按"累计到达该阶段"统计，反映客户从上到下的真实流转。</p></div><button class="panel-link" data-route="analytics">查看分析 →</button></div><div class="funnel">'+funnel+'</div></section><section class="card"><div class="panel-head"><div><h2>异常提醒</h2><p>优先处理跟进超时与档案质量问题。</p></div></div><div class="alert-list">'+(alertHtml||'<div class="empty"><strong>暂无异常</strong>当前数据状态良好。</div>')+'</div></section></div>';
     }
     function opportunitiesView(){
-      var list=scopedCustomers().filter(function(c){return c.stage!=="已成交";});
+      var pool=scopedCustomers().filter(function(c){return c.stage!=="已成交";});
+      var tierCounts={all:pool.length};
+      TIERS.forEach(function(t){tierCounts[t]=pool.filter(function(c){return (c.modelTier||"")===t;}).length;});
+      var list=pool.slice();
       if(ui.oppQuery)list=list.filter(function(c){return [c.name,c.industry,c.need,c.contact,c.area].join(" ").toLowerCase().indexOf(ui.oppQuery.toLowerCase())>=0;});
       if(ui.oppStage!=="all")list=list.filter(function(c){return c.stage===ui.oppStage;});
       if(ui.oppKind!=="all")list=list.filter(function(c){return c.kind===ui.oppKind;});
-      list.sort(function(a,b){return b.score-a.score;});
-      var shown=list.slice(0,36);
+      if(ui.oppTier!=="all")list=list.filter(function(c){return (c.modelTier||"")===ui.oppTier;});
+      list.sort(compareOpportunity);
+      var oppLimit=Math.min(Math.max(1,ui.oppShown||40),300);   // 上限 300，避免一次渲染上千张卡
+      var shown=list.slice(0,oppLimit);
+      var tieCount={};shown.forEach(function(c){var key=scoreKey(c);tieCount[key]=(tieCount[key]||0)+1;});
       var actions=canEdit()?'<button class="btn" data-action="new-customer">＋ 新增线索</button><button class="btn btn-primary" data-action="new-task">＋ 创建拜访</button>':"";
       var cards=shown.map(function(c){
         var pendingVisit=pendingVisitFor(c.id),taskAction="";
         if(canEdit())taskAction=pendingVisit?'<button class="btn btn-sm btn-created" data-action="view-visits" data-id="'+c.id+'">查看已有拜访计划</button>':'<button class="btn btn-sm btn-quick" data-action="quick-task" data-id="'+c.id+'">一键生成拜访计划</button>';
-        return '<article class="opp-card card"><div class="opp-top"><div><div class="opp-name">'+esc(c.name)+'</div><div class="muted">客户编号 '+esc(c.id)+'</div><div style="margin-top:5px">'+badge(c.kind,c.kind==="新客"?"blue":"purple")+" "+badge(c.customerType,"orange")+" "+badge(c.area)+'</div></div><div class="opp-score">'+c.score+'</div></div><div class="opp-reason"><b style="color:var(--text)">推荐原因</b><br>'+esc(c.reasons.join(" · "))+'</div><div style="margin-bottom:11px"><span class="muted">经营部门：</span>'+esc(org(c.managingOrgId).name)+'<br><span class="muted">下一步：</span>'+esc(c.nextAction)+(pendingVisit?'<br><span class="muted">已安排：</span>'+fmtDateTime(pendingVisit.time)+" · "+esc(pendingVisit.owner):"")+'</div><div class="opp-actions"><button class="btn btn-sm btn-ai-profile" data-action="ai-customer-profile" data-id="'+c.id+'">✦ AI 客户档案</button>'+taskAction+'</div></article>';
+        return '<article class="opp-card card"><div class="opp-top"><div><div class="opp-name">'+esc(c.name)+tierBadgeHtml(c.modelTier)+'</div><div class="muted">客户编号 '+esc(c.id)+'</div><div style="margin-top:5px">'+badge(c.kind,c.kind==="新客"?"blue":"purple")+" "+badge(c.customerType,"orange")+" "+badge(c.area)+'</div></div><div class="opp-score-col"><div class="opp-score">'+c.score+'</div>'+(tieCount[scoreKey(c)]>1?'<div class="opp-tie">并列 '+tieCount[scoreKey(c)]+' 家</div>':"")+'</div></div><div class="opp-reason"><b style="color:var(--text)">推荐原因</b><br>'+esc(c.reasons.join(" · "))+'</div>'+contributionAxisHtml(c)+(c.solutionLine?'<div class="opp-line"><b>方案线：</b>'+esc(c.solutionLine)+(c.solutionCoefficient?"（系数 "+c.solutionCoefficient+"）":"")+'</div>':"")+'<div style="margin-bottom:11px"><span class="muted">经营部门：</span>'+esc(org(c.managingOrgId).name)+'<br><span class="muted">下一步：</span>'+esc(c.nextAction)+(pendingVisit?'<br><span class="muted">已安排：</span>'+fmtDateTime(pendingVisit.time)+" · "+esc(pendingVisit.owner):"")+'</div><div class="opp-actions"><button class="btn btn-sm btn-ai-profile" data-action="ai-customer-profile" data-id="'+c.id+'">✦ AI 客户档案</button>'+taskAction+'</div></article>';
       }).join("");
-      return head(actions)+'<div class="filterbar card"><label class="search-box"><span>⌕</span><input id="oppQuery" aria-label="搜索推荐商机" value="'+esc(ui.oppQuery)+'" placeholder="搜索政企客户、行业、需求或区域"></label><select class="select filter-select" id="oppStage" aria-label="按经营阶段筛选商机"><option value="all">全部阶段</option>'+STAGES.map(function(s){return '<option '+(ui.oppStage===s?"selected":"")+'>'+s+'</option>';}).join("")+'</select><select class="select filter-select" id="oppKind" aria-label="按线索类型筛选商机"><option value="all">新客 + 猎户</option><option '+(ui.oppKind==="新客"?"selected":"")+'>新客</option><option '+(ui.oppKind==="猎户"?"selected":"")+'>猎户</option></select><span class="scope-pill">政企客户 · 集客部</span><span class="muted">共 '+list.length+' 个，当前展示前 '+shown.length+' 个</span></div><section class="opportunity-grid">'+(cards||'<div class="card empty" style="grid-column:1/-1"><strong>没有符合条件的商机</strong>请调整筛选条件。</div>')+'</section>';
+      return head(actions)+'<div class="filterbar card"><label class="search-box"><span>⌕</span><input id="oppQuery" aria-label="搜索推荐商机" value="'+esc(ui.oppQuery)+'" placeholder="搜索政企客户、行业、需求或区域"></label><select class="select filter-select" id="oppStage" aria-label="按经营阶段筛选商机"><option value="all">全部阶段</option>'+STAGES.map(function(s){return '<option '+(ui.oppStage===s?"selected":"")+'>'+s+'</option>';}).join("")+'</select><select class="select filter-select" id="oppKind" aria-label="按线索类型筛选商机"><option value="all">新客 + 猎户</option><option '+(ui.oppKind==="新客"?"selected":"")+'>新客</option><option '+(ui.oppKind==="猎户"?"selected":"")+'>猎户</option></select><select class="select filter-select" id="oppTier" aria-label="按评分等级筛选商机"><option value="all"'+(ui.oppTier==="all"?" selected":"")+'>全部等级 ('+tierCounts.all+')</option>'+TIERS.map(function(t){return '<option value="'+t+'"'+(ui.oppTier===t?" selected":"")+'>'+esc(TIER_LABEL[t])+' ('+(tierCounts[t]||0)+')</option>';}).join("")+'</select><span class="scope-pill">政企客户 · 集客部</span><span class="muted">共 '+list.length+' 个，当前展示前 '+shown.length+' 个</span>'+(shown.length<list.length&&oppLimit<300?'<button class="btn btn-sm" data-action="opp-more">显示更多</button>':"")+'</div><section class="opportunity-grid">'+(cards||'<div class="card empty" style="grid-column:1/-1"><strong>没有符合条件的商机</strong>请调整筛选条件。</div>')+'</section>';
     }
     function customersView(){
       var allCustomers=scopedCustomers(),list=allCustomers.slice();
@@ -2748,7 +2935,7 @@
       var flowTimeline=c.crmFlow.slice().sort(function(a,b){return new Date(b.time)-new Date(a.time);}).slice(0,10).map(function(event){return '<div class="timeline-item"><b>'+esc(event.action)+'<span class="crm-direction">'+esc(event.fromLabel+' → '+event.toLabel)+'</span></b><p>'+fmtDateTime(event.time)+' · 操作人：'+esc(event.operator)+'<br>'+esc(event.reason||"")+'</p></div>';}).join("");
       var demand=customerDemandProfile(c),matches=matchProductResources(c);
       var resourceHtml=matches.map(function(item,index){return '<article class="resource-match-card"><div class="resource-match-head"><div class="resource-match-title"><i>'+String(index+1).padStart(2,"0")+'</i><div><b>'+esc(item.name)+'</b><span>'+esc(item.category+" · "+item.level)+'</span></div></div><div class="resource-score"><strong>'+item.score+'%</strong>匹配度</div></div><p class="resource-value">'+esc(item.value)+'</p><div class="resource-reason"><b>匹配依据：</b>'+esc(item.reasons.join("；"))+'</div><div class="resource-tags">'+item.resources.map(function(resource){return '<span class="resource-tag">'+esc(resource)+'</span>';}).join("")+'</div></article>';}).join("");
-      openModal("CRM 客户详情",'<div class="detail-hero"><div class="detail-title"><div><h3>'+esc(c.name)+'</h3><div>'+badge(c.kind,c.kind==="新客"?"blue":"purple")+" "+badge(c.customerType,"orange")+" "+badge(c.stage,stageClass(c.stage))+" "+badge("评分 "+c.score,"orange")+'</div></div><div class="source-icon">CRM</div></div><p class="subtitle">客户编号 '+esc(c.id)+" · "+esc(orgPathText(c.managingOrgId))+'</p></div>'+deleteNotice+addressDetailHtml(c)+'<div class="detail-grid"><div class="kv"><label>是否为千百万集团</label><span>'+esc(customerFlag(c.isQianBaiWanGroup))+'</span></div><div class="kv"><label>是否要客</label><span>'+esc(customerFlag(c.isKeyAccount))+'</span></div><div class="kv"><label>行业 / 区域</label><span>'+esc(c.industry+" · "+c.area)+'</span></div><div class="kv"><label>联系人</label><span>'+esc((c.contact||"待补充")+" · "+(c.phone||"无电话"))+'</span></div><div class="kv"><label>当前负责人</label><span>'+esc(c.owner)+'</span></div><div class="kv"><label>核心需求</label><span>'+esc(c.need)+'</span></div><div class="kv"><label>归属依据</label><span>'+esc(c.assignmentReason+"（"+c.assignmentConfidence+"）")+'</span></div><div class="kv"><label>下一步行动</label><span>'+esc(c.nextAction)+'</span></div></div><section class="demand-section"><div class="demand-section-head"><div><h4>客户需求信息</h4><p>汇总客户档案中的需求、行业、现网和待核验要素。</p></div><span class="scope-pill">'+esc(demand.priority)+'</span></div><div class="demand-grid"><div class="demand-item"><label>需求方向</label><b>'+esc(demand.direction)+'</b></div><div class="demand-item"><label>行业与场景</label><b>'+esc(demand.scene)+'</b></div><div class="demand-item"><label>需求信息完整度</label><b>'+esc(demand.completeness)+'</b></div><div class="demand-item"><label>现网情况</label><b>'+esc(demand.currentNetwork)+'</b></div><div class="demand-item" style="grid-column:span 2"><label>本次重点核验</label><b>'+esc(demand.constraints)+'</b></div></div></section><section class="demand-section"><div class="demand-section-head"><div><h4>产品资源匹配</h4><p>依据需求关键词、行业、客户潜力和经营阶段推荐 Top 3。</p></div><span class="scope-pill">规则匹配 · 人工确认</span></div><div class="resource-match-list">'+resourceHtml+'</div><div class="data-note" style="margin-top:10px">匹配结果用于调取售前方案和支撑资源，不代表客户已确认采购；拜访后请根据真实反馈更新需求。</div></section><div class="brief-section"><h4>当前组织责任链</h4><div class="crm-flow-path">'+pathHtml+'</div></div><div class="crm-history-grid"><section class="crm-history-panel"><h3>经营阶段流转</h3><div class="timeline">'+stageTimeline+'</div></section><section class="crm-history-panel"><h3>组织分配与改派留痕</h3><div class="timeline">'+flowTimeline+'</div></section></div><div class="brief-section"><h4>评分依据</h4><ul>'+c.reasons.map(function(r){return "<li>"+esc(r)+"</li>";}).join("")+'</ul></div><h3 style="margin:18px 0 10px;font-size:13px">拜访与互动轨迹</h3><div class="timeline">'+(timeline||'<span class="muted">暂无互动记录</span>')+'</div>',true,'<button class="btn" data-action="brief" data-id="'+c.id+'">✦ AI 生成拜访简报</button>'+(canEdit()?(pendingDelete?'<button class="btn btn-danger" data-action="customer-delete-approvals">删除待审批</button>':'<button class="btn btn-danger" data-action="request-customer-delete" data-id="'+c.id+'">申请删除</button>')+'<button class="btn" data-action="edit-customer" data-id="'+c.id+'">CRM 流转 / 编辑</button><button class="btn btn-primary" data-action="new-task" data-id="'+c.id+'">创建拜访任务</button>':""));
+      openModal("CRM 客户详情",'<div class="detail-hero"><div class="detail-title"><div><h3>'+esc(c.name)+'</h3><div>'+badge(c.kind,c.kind==="新客"?"blue":"purple")+" "+badge(c.customerType,"orange")+" "+badge(c.stage,stageClass(c.stage))+" "+badge("评分 "+c.score,"orange")+tierBadgeHtml(c.modelTier)+'</div></div><div class="source-icon">CRM</div></div><p class="subtitle">客户编号 '+esc(c.id)+" · "+esc(orgPathText(c.managingOrgId))+'</p></div>'+deleteNotice+addressDetailHtml(c)+modelPanelHtml(c)+'<div class="detail-grid"><div class="kv"><label>是否为千百万集团</label><span>'+esc(customerFlag(c.isQianBaiWanGroup))+'</span></div><div class="kv"><label>是否要客</label><span>'+esc(customerFlag(c.isKeyAccount))+'</span></div><div class="kv"><label>行业 / 区域</label><span>'+esc(c.industry+" · "+c.area)+'</span></div><div class="kv"><label>联系人</label><span>'+esc((c.contact||"待补充")+" · "+(c.phone||"无电话"))+'</span></div><div class="kv"><label>当前负责人</label><span>'+esc(c.owner)+'</span></div><div class="kv"><label>核心需求</label><span>'+esc(c.need)+'</span></div><div class="kv"><label>归属依据</label><span>'+esc(c.assignmentReason+"（"+c.assignmentConfidence+"）")+'</span></div><div class="kv"><label>下一步行动</label><span>'+esc(c.nextAction)+'</span></div></div><section class="demand-section"><div class="demand-section-head"><div><h4>客户需求信息</h4><p>汇总客户档案中的需求、行业、现网和待核验要素。</p></div><span class="scope-pill">'+esc(demand.priority)+'</span></div><div class="demand-grid"><div class="demand-item"><label>需求方向</label><b>'+esc(demand.direction)+'</b></div><div class="demand-item"><label>行业与场景</label><b>'+esc(demand.scene)+'</b></div><div class="demand-item"><label>需求信息完整度</label><b>'+esc(demand.completeness)+'</b></div><div class="demand-item"><label>现网情况</label><b>'+esc(demand.currentNetwork)+'</b></div><div class="demand-item" style="grid-column:span 2"><label>本次重点核验</label><b>'+esc(demand.constraints)+'</b></div></div></section><section class="demand-section"><div class="demand-section-head"><div><h4>产品资源匹配</h4><p>依据需求关键词、行业、客户潜力和经营阶段推荐 Top 3。</p></div><span class="scope-pill">规则匹配 · 人工确认</span></div><div class="resource-match-list">'+resourceHtml+'</div><div class="data-note" style="margin-top:10px">匹配结果用于调取售前方案和支撑资源，不代表客户已确认采购；拜访后请根据真实反馈更新需求。</div></section><div class="brief-section"><h4>当前组织责任链</h4><div class="crm-flow-path">'+pathHtml+'</div></div><div class="crm-history-grid"><section class="crm-history-panel"><h3>经营阶段流转</h3><div class="timeline">'+stageTimeline+'</div></section><section class="crm-history-panel"><h3>组织分配与改派留痕</h3><div class="timeline">'+flowTimeline+'</div></section></div><div class="brief-section"><h4>评分依据</h4><ul>'+c.reasons.map(function(r){return "<li>"+esc(r)+"</li>";}).join("")+'</ul></div><h3 style="margin:18px 0 10px;font-size:13px">拜访与互动轨迹</h3><div class="timeline">'+(timeline||'<span class="muted">暂无互动记录</span>')+'</div>',true,'<button class="btn" data-action="brief" data-id="'+c.id+'">✦ AI 生成拜访简报</button>'+(canEdit()?(pendingDelete?'<button class="btn btn-danger" data-action="customer-delete-approvals">删除待审批</button>':'<button class="btn btn-danger" data-action="request-customer-delete" data-id="'+c.id+'">申请删除</button>')+'<button class="btn" data-action="edit-customer" data-id="'+c.id+'">CRM 流转 / 编辑</button><button class="btn btn-primary" data-action="new-task" data-id="'+c.id+'">创建拜访任务</button>':""));
     }
     function editCustomerModal(id){
       var c=customer(id);if(!c||!canEdit())return toast("无权编辑该客户。","error");
@@ -2840,14 +3027,17 @@
       var headers=rows[0].map(function(h){return h.trim();});
       function index(names){for(var i=0;i<names.length;i++){var n=headers.indexOf(names[i]);if(n>=0)return n;}return -1;}
       var map={isQianBaiWanGroup:index(["是否为千百万集团"]),isKeyAccount:index(["是否要客"]),name:index(["企业名称","客户名称"]),kind:index(["线索类型","新客/猎户"]),industry:index(["行业"]),contact:index(["联系人"]),phone:index(["电话","联系电话"]),need:index(["需求"])};
+      var PROFILE_COLUMNS=["参保人数","注册资本","成立日期","国标行业大类","企查查行业中类","企业(机构)类型","官网网址","邮箱","更多电话","有效手机号","注册地址","经营范围","企业简介"];
+      function buildProfile(r){var out={},hit=0;PROFILE_COLUMNS.forEach(function(col){var at=headers.indexOf(col);if(at<0)return;var v=String(r[at]||"").trim();if(v&&v!=="-"){out[col]=v;hit++;}});return hit?out:null;}
       if(map.name<0)throw new Error("缺少“客户名称”列");
       var payloadRows=[];
       rows.slice(1).forEach(function(r){
         function val(k){return map[k]>=0?(r[map[k]]||"").trim():"";}
         var name=val("name");if(!name)return;
+        var profile=buildProfile(r);
         var dep=defaultDepartment();
         if(!dep)throw new Error("当前组织范围内没有可承载政企客户的集客部");
-        var frontendCustomer={id:uid("c"),name:name,isQianBaiWanGroup:customerFlag(val("isQianBaiWanGroup")),isKeyAccount:customerFlag(val("isKeyAccount")),kind:val("kind")==="猎户"?"猎户":"新客",customerType:"政企客户",carrier:val("kind")==="猎户"?"待核验":"",industry:val("industry")||"待分类",province:dep.province,city:dep.city,area:dep.district,contact:val("contact"),phone:val("phone"),sources:["CSV导入"],need:val("need")||"需求待识别",owner:scopedManagerChoices(dep.id)[0]||"待分配",stage:"线索入池",potential:"中",nextAction:"完成首次触达",createdAt:new Date().toISOString(),address:"",managingOrgId:dep.id,tags:["新导入","政企客户",dep.name],reasons:[]};frontendCustomer.score=scoreCustomer(frontendCustomer);frontendCustomer.reasons=recommendationReasons(frontendCustomer);var payload=customerImportPayload(frontendCustomer);if(payload)payloadRows.push(payload);
+        var frontendCustomer={id:uid("c"),name:name,isQianBaiWanGroup:customerFlag(val("isQianBaiWanGroup")),isKeyAccount:customerFlag(val("isKeyAccount")),kind:val("kind")==="猎户"?"猎户":"新客",customerType:"政企客户",carrier:val("kind")==="猎户"?"待核验":"",industry:val("industry")||(profile&&profile["国标行业大类"])||"待分类",province:dep.province,city:dep.city,area:dep.district,contact:val("contact"),phone:val("phone")||(profile&&profile["有效手机号"])||"",sources:["CSV导入"],need:val("need")||"需求待识别",owner:scopedManagerChoices(dep.id)[0]||"待分配",stage:"线索入池",potential:"中",nextAction:"完成首次触达",createdAt:new Date().toISOString(),address:(profile&&profile["注册地址"])||"",managingOrgId:dep.id,tags:["新导入","政企客户",dep.name],reasons:[]};if(profile)frontendCustomer.profile=profile;frontendCustomer.score=scoreCustomer(frontendCustomer);frontendCustomer.reasons=recommendationReasons(frontendCustomer);var payload=customerImportPayload(frontendCustomer);if(payload)payloadRows.push(payload);
       });
       if(!payloadRows.length)throw new Error("CSV 中没有可导入的有效客户");
       var result=await backendRequest("/customers/import",{method:"POST",body:JSON.stringify({sourceName:"CSV客户导入",rows:payloadRows})});await synchronizeBackendCustomers(false);return {added:result.inserted,review:result.duplicates,rejected:result.rejected||0};
@@ -2991,7 +3181,8 @@
         var rejectResult=rejectCustomerDeleteRequest(id,rejectComment);if(!rejectResult.ok)return toast(rejectResult.message,"error");render();customerDeleteApprovalModal();toast("删除申请已驳回，客户继续保留。");
       }
       else if(name==="edit-customer"){closeModal();editCustomerModal(id);}
-      else if(name==="view-ai-priorities"){closeModal();ui.oppQuery="";ui.oppStage="all";ui.oppKind="all";go("opportunities");}
+      else if(name==="view-ai-priorities"){closeModal();ui.oppQuery="";ui.oppStage="all";ui.oppKind="all";ui.oppTier="all";ui.oppShown=40;go("opportunities");}
+      else if(name==="opp-more"){ui.oppShown=(ui.oppShown||40)+60;render();}
       else if(name==="ai-update-opportunities")aiUpdateOpportunitiesModal();
       else if(name==="daily-action-list")dailyActionModalAsync();
       else if(name==="ai-customer-profile")aiCustomerProfileModal(id);
@@ -3022,10 +3213,37 @@
       else if(name==="page"){ui.customerPage=Math.max(1,Number(action.dataset.page)||1);render();}
       else if(name==="copy-brief"){var c=customer(id);if(c){var b=aiService.generateVisitBrief(c);copyText("AI 拜访简报｜"+c.name+"\n\n本次拜访目标\n"+b.target+"\n\n客户基本情况\n- "+b.basics.join("\n- ")+"\n\n建议重点了解\n- "+b.focus.join("\n- ")+"\n\n推荐沟通问题\n- "+b.questions.join("\n- ")+"\n\n风险提醒\n- "+b.risks.join("\n- ")+"\n\n下一步目标\n"+b.nextGoal);toast("AI 拜访简报已复制。");}}
     });
+    // 搜索框重绘保护：本页 render() 会整体替换 DOM。若在输入法组合（拼音等）过程中重绘，
+    // <input> 会被换成新节点、候选词被中断，表现为「打字卡顿 / 丢字」。因此：
+    //   组合中 → 只暂存取值、不重绘；组合结束 → 再触发一次延迟重绘并恢复光标。
+    function isSearchInput(id){return id==="oppQuery"||id==="customerQuery";}
+    function scheduleSearchRender(elementId,timerKey){
+      var node=$("#"+elementId);
+      var caret=node?node.selectionStart:null;
+      clearTimeout(window[timerKey]);
+      window[timerKey]=setTimeout(function(){
+        render();
+        var fresh=$("#"+elementId);
+        if(fresh){fresh.focus();if(caret!==null){try{fresh.setSelectionRange(caret,caret);}catch(ignore){}}}
+      },180);
+    }
+    document.addEventListener("compositionstart",function(e){
+      if(e.target&&isSearchInput(e.target.id))e.target.dataset.composing="1";
+    });
+    document.addEventListener("compositionend",function(e){
+      if(!e.target||!isSearchInput(e.target.id))return;
+      delete e.target.dataset.composing;
+      if(e.target.id==="oppQuery"){ui.oppQuery=e.target.value;scheduleSearchRender("oppQuery","__oq");}
+      else{ui.customerQuery=e.target.value;ui.customerPage=1;scheduleSearchRender("customerQuery","__cq");}
+    });
     document.addEventListener("input",function(e){
-      if(e.target.id==="loginAccount")updateIdentityPreview();
-      else if(e.target.id==="oppQuery"){ui.oppQuery=e.target.value;var pos=e.target.selectionStart;clearTimeout(window.__oq);window.__oq=setTimeout(function(){render();var n=$("#oppQuery");if(n){n.focus();n.setSelectionRange(pos,pos);}},180);}
-      else if(e.target.id==="customerQuery"){ui.customerQuery=e.target.value;ui.customerPage=1;var p=e.target.selectionStart;clearTimeout(window.__cq);window.__cq=setTimeout(function(){render();var n=$("#customerQuery");if(n){n.focus();n.setSelectionRange(p,p);}},180);}
+      if(e.target.id==="loginAccount"){updateIdentityPreview();return;}
+      if(!isSearchInput(e.target.id))return;
+      var composing=!!e.isComposing||e.inputType==="insertCompositionText"||e.target.dataset.composing==="1";
+      if(e.target.id==="oppQuery")ui.oppQuery=e.target.value;
+      else{ui.customerQuery=e.target.value;ui.customerPage=1;}
+      if(composing)return;  // 输入法组合中：只暂存，绝不重绘
+      scheduleSearchRender(e.target.id,e.target.id==="oppQuery"?"__oq":"__cq");
     });
     document.addEventListener("change",function(e){
       if(e.target.name==="managingOrgId"||e.target.name==="customerId"){
@@ -3034,6 +3252,7 @@
       }
       if(e.target.id==="oppStage"){ui.oppStage=e.target.value;render();}
       else if(e.target.id==="oppKind"){ui.oppKind=e.target.value;render();}
+      else if(e.target.id==="oppTier"){ui.oppTier=e.target.value;render();}
       else if(e.target.id==="customerStage"){ui.customerStage=e.target.value;ui.customerPage=1;render();}
       else if(e.target.id==="customerKind"){ui.customerKind=e.target.value;ui.customerPage=1;render();}
       else if(e.target.id==="weeklyOwner"){ui.weeklyOwner=e.target.value;render();loadServerWeekly();}
@@ -3098,7 +3317,7 @@
         if(ownershipChanged&&(flowReason.length<5||pendingCustomerChange(editCustomer.id)||pendingCustomerDeleteRequest(editCustomer.id)))return toast("归属变更需填写至少 5 字原因，且不能存在待审批申请。","error");
         var targetBackendOrg=ownershipChanged?backendOrganizations.find(function(item){return item.frontendId===editDep.id;}):null;
         if(ownershipChanged&&!targetBackendOrg)return toast("目标组织未与后端同步，请刷新页面。","error");
-        var editPayload={name:editData.name,industry:editData.industry||"待分类",contact:editData.contact,phone:editData.phone,need:editData.need,stage:editData.stage,potential:editData.potential,score:editCustomer.score,nextAction:editData.nextAction,isQianBaiWanGroup:customerFlag(editData.isQianBaiWanGroup),isKeyAccount:customerFlag(editData.isKeyAccount),stageReason:flowReason,version:editCustomer.backendVersion};
+        var editPayload={name:editData.name,industry:editData.industry||"待分类",contact:editData.contact,phone:editData.phone,need:editData.need,stage:editData.stage,potential:editData.potential,score:Math.round(Number(editCustomer.score)||0),nextAction:editData.nextAction,isQianBaiWanGroup:customerFlag(editData.isQianBaiWanGroup),isKeyAccount:customerFlag(editData.isKeyAccount),stageReason:flowReason,version:editCustomer.backendVersion};
         if(ownershipChanged)editPayload.ownershipRequest={targetOrganizationId:targetBackendOrg.id,targetOwnerName:editData.owner,reason:flowReason};
         var savedCustomer;
         try{savedCustomer=await backendRequest("/customers/"+encodeURIComponent(editCustomer.id),{method:"PATCH",body:JSON.stringify(editPayload)});}

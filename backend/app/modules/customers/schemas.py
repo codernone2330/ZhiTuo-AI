@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -37,6 +37,10 @@ class CustomerImportRow(BaseModel):
     crmFlow: list[dict] = Field(default_factory=list)
     assignmentReason: str | None = Field(None, max_length=500)
     assignmentConfidence: str | None = Field(None, max_length=80)
+    # 工商档案（企查查字段，可选）。存在时导入即按评分模型打分。
+    # 支持列名：参保人数/注册资本/成立日期/国标行业大类/企查查行业中类/企业(机构)类型/
+    # 官网网址/邮箱/更多电话/有效手机号/注册地址/经营范围/企业简介。
+    profile: dict[str, Any] | None = None
 
     @field_validator("kind")
     @classmethod

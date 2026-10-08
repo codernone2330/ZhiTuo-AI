@@ -1,0 +1,237 @@
+{
+ "meta": {
+  "region": "深圳·福田区",
+  "anchorMode": "auto",
+  "anchors": {
+   "size": 40.95,
+   "capital": 500.0
+  },
+  "anchorSources": {
+   "size": "auto(已锁定)",
+   "capital": "auto(已锁定)"
+  },
+  "missingPolicy": {
+   "_说明": "缺失值处理策略【已与业务确认，两个特征故意不同，勿统一】。",
+   "size": "zero",
+   "cap": "neutral",
+   "_理由": {
+    "size=zero": "参保人数缺失 → 记 0 分（保守）。参保是『有无真实雇工』的强证据；缺失大概率意味着未实际经营/未开户。",
+    "cap=neutral": "注册资本缺失 → 用中位数填充（中性）。资本缺失多属登记瑕疵/未填，不代表企业无实力。"
+   }
+  },
+  "asOf": "2026-10-06",
+  "total": 100,
+  "persistVersion": "v1-均衡版",
+  "generatedAt": "2026-10-06T15:28:05"
+ },
+ "versions": {
+  "v1-均衡版": {
+   "mean": 58.3,
+   "std": 13.1,
+   "p10": 42.9,
+   "median": 56.8,
+   "p90": 78.4,
+   "min": 26.7,
+   "max": 85.7,
+   "head100": 82.8,
+   "tail100": 38.4,
+   "spread": 44.4,
+   "tier": {
+    "S": 8,
+    "A": 12,
+    "B": 20,
+    "C": 29,
+    "D": 31
+   }
+  },
+  "v2-方案导向版": {
+   "mean": 58.4,
+   "std": 15.09,
+   "p10": 40.3,
+   "median": 57.5,
+   "p90": 80.6,
+   "min": 19.6,
+   "max": 87.7,
+   "head100": 84.4,
+   "tail100": 35.2,
+   "spread": 49.2,
+   "tier": {
+    "S": 11,
+    "A": 14,
+    "B": 15,
+    "C": 24,
+    "D": 36
+   }
+  },
+  "v3-执行导向版": {
+   "mean": 57.3,
+   "std": 13.14,
+   "p10": 42.5,
+   "median": 56.0,
+   "p90": 76.2,
+   "min": 27.3,
+   "max": 89.7,
+   "head100": 82.6,
+   "tail100": 37.8,
+   "spread": 44.8,
+   "tier": {
+    "S": 6,
+    "A": 13,
+    "B": 20,
+    "C": 27,
+    "D": 34
+   }
+  }
+ },
+ "correlation": {
+  "v1-均衡版 vs v2-方案导向版": 0.953,
+  "v1-均衡版 vs v3-执行导向版": 0.937,
+  "v2-方案导向版 vs v3-执行导向版": 0.815
+ },
+ "features": {
+  "真实规模": {
+   "mean": 0.256,
+   "std": 0.315,
+   "ceilingRatio": 0.03
+  },
+  "资本实力": {
+   "mean": 0.801,
+   "std": 0.18,
+   "ceilingRatio": 0.28
+  },
+  "方案线价值": {
+   "mean": 0.585,
+   "std": 0.199,
+   "ceilingRatio": 0.06
+  },
+  "方案契合": {
+   "mean": 0.739,
+   "std": 0.277,
+   "ceilingRatio": 0.38
+  },
+  "数字足迹": {
+   "mean": 0.35,
+   "std": 0.396,
+   "ceilingRatio": 0.2
+  },
+  "触达可达": {
+   "mean": 0.709,
+   "std": 0.244,
+   "ceilingRatio": 0.09
+  },
+  "拜访时效": {
+   "mean": 0.778,
+   "std": 0.169,
+   "ceilingRatio": 0.27
+  },
+  "企业性质": {
+   "mean": 0.579,
+   "std": 0.203,
+   "ceilingRatio": 0.15
+  }
+ },
+ "lines": [
+  {
+   "line": "智慧工厂 / 工业互联网",
+   "coefficient": 5.0,
+   "count": 6,
+   "ratio": 6.0,
+   "avgScore": 75.8,
+   "topTier": 5
+  },
+  {
+   "line": "智慧港口 / 智慧物流",
+   "coefficient": 4.5,
+   "count": 1,
+   "ratio": 1.0,
+   "avgScore": 58.2,
+   "topTier": 0
+  },
+  {
+   "line": "智慧电力 / 能源",
+   "coefficient": 4.5,
+   "count": 1,
+   "ratio": 1.0,
+   "avgScore": 53.9,
+   "topTier": 0
+  },
+  {
+   "line": "云网 / IDC / 算力 / 云游戏",
+   "coefficient": 4.0,
+   "count": 50,
+   "ratio": 50.0,
+   "avgScore": 63.7,
+   "topTier": 15
+  },
+  {
+   "line": "智慧金融 / 银行",
+   "coefficient": 4.0,
+   "count": 2,
+   "ratio": 2.0,
+   "avgScore": 41.8,
+   "topTier": 0
+  },
+  {
+   "line": "智慧园区 / 楼宇 / 电梯",
+   "coefficient": 3.5,
+   "count": 24,
+   "ratio": 24.0,
+   "avgScore": 47.8,
+   "topTier": 0
+  },
+  {
+   "line": "智慧文旅 / 酒店",
+   "coefficient": 3.5,
+   "count": 6,
+   "ratio": 6.0,
+   "avgScore": 56.0,
+   "topTier": 0
+  },
+  {
+   "line": "智慧零售 / 供应链",
+   "coefficient": 2.5,
+   "count": 7,
+   "ratio": 7.0,
+   "avgScore": 53.4,
+   "topTier": 0
+  },
+  {
+   "line": "基础通信 / 通用政企",
+   "coefficient": 2.0,
+   "count": 3,
+   "ratio": 3.0,
+   "avgScore": 46.0,
+   "topTier": 0
+  }
+ ],
+ "tierCounts": {
+  "S": 8,
+  "A": 12,
+  "B": 20,
+  "C": 29,
+  "D": 31
+ },
+ "selfCheck": {
+  "total": 100,
+  "unmappedCount": 0,
+  "unmappedRatio": 0.0,
+  "unmapped": {},
+  "fallbackCount": 3,
+  "fallbackRatio": 0.03,
+  "lineCounts": {
+   "智慧工厂 / 工业互联网": 6,
+   "云网 / IDC / 算力 / 云游戏": 50,
+   "智慧零售 / 供应链": 7,
+   "智慧园区 / 楼宇 / 电梯": 24,
+   "智慧电力 / 能源": 1,
+   "智慧文旅 / 酒店": 6,
+   "基础通信 / 通用政企": 3,
+   "智慧金融 / 银行": 2,
+   "智慧港口 / 智慧物流": 1
+  },
+  "maxUnmappedRatio": 0.15,
+  "maxFallbackRatio": 0.2,
+  "passed": true
+ },
+ "total": 100
+}
